@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -44,23 +46,32 @@ func (m spinnerModel) View() string {
 }
 
 // Spin ejecuta task mostrando un spinner con title. Al terminar imprime ✔ o ✘.
-func Spin(title, doneMsgText string, task func(status Status) error) error {
+// Si el usuario presiona Ctrl+C, el ctx que recibe task se cancela.
+func Spin(ctx context.Context, title, doneText string, task func(ctx context.Context, status Status) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(accentStyle))
-	p := tea.NewProgram(spinnerModel{sp: sp, title: title})
+	p := tea.NewProgram(spinnerModel{sp: sp, title: title}, tea.WithContext(ctx))
 	go func() {
-		err := task(func(s string) { p.Send(statusMsg(s)) })
+		err := task(ctx, func(s string) { p.Send(statusMsg(s)) })
 		p.Send(doneMsg{err: err})
 	}()
+
 	final, err := p.Run()
 	if err != nil {
-		return err
+		return fmt.Errorf("spinner: %w", err)
 	}
-	if err := final.(spinnerModel).err; err != nil {
-		if err != ErrAborted {
+	model, ok := final.(spinnerModel)
+	if !ok {
+		return fmt.Errorf("spinner: modelo inesperado %T", final)
+	}
+	if model.err != nil {
+		if !errors.Is(model.err, ErrAborted) {
 			Error(title)
 		}
-		return err
+		return model.err
 	}
-	Success(doneMsgText)
+	Success(doneText)
 	return nil
 }

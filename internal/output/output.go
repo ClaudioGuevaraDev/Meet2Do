@@ -33,7 +33,7 @@ func FileName(k Kind) string {
 
 // Existing devuelve las rutas que ya existen en dir para los tipos dados.
 func Existing(dir string, kinds []Kind) []string {
-	var out []string
+	out := make([]string, 0, len(kinds))
 	for _, k := range kinds {
 		p := filepath.Join(dir, FileName(k))
 		if _, err := os.Stat(p); err == nil {
@@ -46,31 +46,43 @@ func Existing(dir string, kinds []Kind) []string {
 // WriteTODO guarda el TODO generado.
 func WriteTODO(dir, content string) (string, error) {
 	p := filepath.Join(dir, FileName(TODO))
-	return p, os.WriteFile(p, []byte(content), 0o644)
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("escribir %s: %w", p, err)
+	}
+	return p, nil
 }
 
 // WriteTranscript guarda la transcripción con un encabezado de fecha.
 func WriteTranscript(dir, text string, date time.Time) (string, error) {
 	p := filepath.Join(dir, FileName(Transcript))
 	content := fmt.Sprintf("# Transcripción de la reunión\n\n_%s_\n\n%s\n", date.Format("2006-01-02 15:04"), text)
-	return p, os.WriteFile(p, []byte(content), 0o644)
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("escribir %s: %w", p, err)
+	}
+	return p, nil
 }
 
 // CopyAudio copia el WAV grabado al destino.
-func CopyAudio(dir, src string) (string, error) {
-	p := filepath.Join(dir, FileName(Audio))
+func CopyAudio(dir, src string) (p string, err error) {
+	p = filepath.Join(dir, FileName(Audio))
 	in, err := os.Open(src)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("abrir audio %s: %w", src, err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }() // solo lectura: el error de Close no afecta la copia
+
 	out, err := os.Create(p)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("crear %s: %w", p, err)
 	}
-	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return "", err
+	defer func() {
+		if cerr := out.Close(); cerr != nil && err == nil {
+			p, err = "", fmt.Errorf("cerrar %s: %w", p, cerr)
+		}
+	}()
+
+	if _, err = io.Copy(out, in); err != nil {
+		return "", fmt.Errorf("copiar audio a %s: %w", p, err)
 	}
-	return p, out.Close()
+	return p, nil
 }

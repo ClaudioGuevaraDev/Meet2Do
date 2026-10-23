@@ -1,6 +1,6 @@
-module meet2do
+module github.com/ClaudioGuevaraDev/Meet2Do
 
-go 1.27.3
+go 1.24.2
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

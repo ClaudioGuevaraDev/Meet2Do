@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/huh"
 
-	"meet2do/internal/ai"
-	"meet2do/internal/output"
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ai"
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
 )
 
 // ErrAborted indica que el usuario canceló un formulario (Ctrl+C / Esc).

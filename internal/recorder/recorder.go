@@ -18,6 +18,18 @@ const (
 	DefaultMic = "default"
 	// DefaultMonitor es el monitor del sink por defecto (lo que suena en parlantes/audífonos).
 	DefaultMonitor = "@DEFAULT_MONITOR@"
+
+	// wavHeaderSize es el tamaño de la cabecera de un WAV PCM; un archivo de ese tamaño no tiene audio.
+	wavHeaderSize = 44
+	// startupGrace es cuánto se espera para detectar que ffmpeg murió al iniciar.
+	startupGrace = 500 * time.Millisecond
+)
+
+var (
+	// ErrNotStarted se devuelve al llamar Stop sin un Start exitoso.
+	ErrNotStarted = errors.New("la grabación no fue iniciada")
+	// ErrEmptyRecording se devuelve cuando el WAV resultante no contiene audio.
+	ErrEmptyRecording = errors.New("la grabación quedó vacía")
 )
 
 // Recorder controla un proceso ffmpeg que graba a un WAV 16 kHz mono.
@@ -58,19 +70,21 @@ func (r *Recorder) Start() error {
 	r.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := r.cmd.StdinPipe()
 	if err != nil {
-		return err
+		return fmt.Errorf("ffmpeg stdin: %w", err)
 	}
 	r.stdin = stdin
 	if err := r.cmd.Start(); err != nil {
-		return fmt.Errorf("no se pudo iniciar ffmpeg: %w", err)
+		r.cmd = nil
+		return fmt.Errorf("iniciar ffmpeg: %w", err)
 	}
 	r.done = make(chan error, 1)
 	go func() { r.done <- r.cmd.Wait() }()
 
 	select {
 	case err := <-r.done:
-		return fmt.Errorf("ffmpeg terminó inesperadamente: %v: %s", err, strings.TrimSpace(r.stderr.String()))
-	case <-time.After(500 * time.Millisecond):
+		r.cmd = nil
+		return fmt.Errorf("ffmpeg terminó inesperadamente: %w: %s", err, r.stderrText())
+	case <-time.After(startupGrace):
 		return nil
 	}
 }
@@ -78,26 +92,40 @@ func (r *Recorder) Start() error {
 // Stop pide a ffmpeg que termine limpiamente ("q") para que el WAV quede bien cerrado.
 func (r *Recorder) Stop() error {
 	if r.cmd == nil {
-		return errors.New("la grabación no fue iniciada")
+		return ErrNotStarted
 	}
+	// Best-effort: si ffmpeg ya terminó, escribir o cerrar stdin falla y no importa;
+	// el resultado real se valida con el tamaño del WAV.
 	_, _ = io.WriteString(r.stdin, "q")
 	_ = r.stdin.Close()
 
-	select {
-	case <-r.done:
-	case <-time.After(5 * time.Second):
-		_ = r.cmd.Process.Signal(os.Interrupt)
-		select {
-		case <-r.done:
-		case <-time.After(3 * time.Second):
-			_ = r.cmd.Process.Kill()
-			<-r.done
-		}
-	}
+	// El código de salida de ffmpeg no es fiable al detenerlo; el resultado se valida
+	// por el tamaño del WAV.
+	_ = r.wait()
+	r.cmd = nil
 
 	info, err := os.Stat(r.Output)
-	if err != nil || info.Size() <= 44 {
-		return fmt.Errorf("la grabación quedó vacía: %s", strings.TrimSpace(r.stderr.String()))
+	if err != nil || info.Size() <= wavHeaderSize {
+		return fmt.Errorf("%w: %s", ErrEmptyRecording, r.stderrText())
 	}
 	return nil
 }
+
+// wait espera a que ffmpeg termine, escalando a SIGINT y luego Kill si no responde.
+func (r *Recorder) wait() error {
+	select {
+	case err := <-r.done:
+		return err
+	case <-time.After(5 * time.Second):
+	}
+	_ = r.cmd.Process.Signal(os.Interrupt) // best-effort, seguido de Kill
+	select {
+	case err := <-r.done:
+		return err
+	case <-time.After(3 * time.Second):
+	}
+	_ = r.cmd.Process.Kill() // el proceso puede haber terminado entre medio
+	return <-r.done
+}
+
+func (r *Recorder) stderrText() string { return strings.TrimSpace(r.stderr.String()) }

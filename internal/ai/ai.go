@@ -4,12 +4,16 @@ package ai
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
+
+// ErrNoProvider indica que no hay ningún CLI de IA instalado.
+var ErrNoProvider = errors.New("no se encontró `claude` ni `codex` en el PATH")
 
 // Provider genera un TODO en Markdown a partir de una transcripción.
 type Provider interface {
@@ -21,15 +25,19 @@ type Provider interface {
 // All devuelve los proveedores soportados.
 func All() []Provider { return []Provider{Claude{}, Codex{}} }
 
-// Available devuelve los proveedores cuyo CLI está en el PATH.
-func Available() []Provider {
-	var out []Provider
-	for _, p := range All() {
+// Available devuelve los proveedores cuyo CLI está en el PATH, o ErrNoProvider.
+func Available() ([]Provider, error) {
+	all := All()
+	out := make([]Provider, 0, len(all))
+	for _, p := range all {
 		if _, err := exec.LookPath(p.Binary()); err == nil {
 			out = append(out, p)
 		}
 	}
-	return out
+	if len(out) == 0 {
+		return nil, ErrNoProvider
+	}
+	return out, nil
 }
 
 // Claude usa `claude -p`.
@@ -44,7 +52,7 @@ func (c Claude) GenerateTODO(ctx context.Context, transcript string) (string, er
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("claude falló: %v: %s", err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("claude falló: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 	return clean(stdout.String()), nil
 }
@@ -58,9 +66,9 @@ func (Codex) Binary() string { return "codex" }
 func (c Codex) GenerateTODO(ctx context.Context, transcript string) (string, error) {
 	dir, err := os.MkdirTemp("", "meet2do-codex-")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("crear carpeta temporal: %w", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }() // limpieza best-effort
 	out := filepath.Join(dir, "todo.md")
 
 	cmd := exec.CommandContext(ctx, c.Binary(), "exec",
@@ -72,8 +80,8 @@ func (c Codex) GenerateTODO(ctx context.Context, transcript string) (string, err
 	cmd.Stdin = strings.NewReader(TODOPrompt + transcript)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("codex falló: %v: %s", err, lastLines(stderr.String(), 10))
+	if err = cmd.Run(); err != nil {
+		return "", fmt.Errorf("codex falló: %w: %s", err, lastLines(stderr.String(), 10))
 	}
 	data, err := os.ReadFile(out)
 	if err != nil {

@@ -1,4 +1,5 @@
-/meet2do
+bin/
+coverage.out
 TODO.md
 transcripcion.md
 reunion.wav

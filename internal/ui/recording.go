@@ -57,7 +57,11 @@ func RecordingScreen() (time.Duration, error) {
 	m := recordingModel{sw: stopwatch.NewWithInterval(time.Second)}
 	final, err := tea.NewProgram(m).Run()
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("pantalla de grabación: %w", err)
 	}
-	return final.(recordingModel).sw.Elapsed(), nil
+	model, ok := final.(recordingModel)
+	if !ok {
+		return 0, fmt.Errorf("pantalla de grabación: modelo inesperado %T", final)
+	}
+	return model.sw.Elapsed(), nil
 }
