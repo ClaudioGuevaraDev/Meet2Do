@@ -1,5 +1,7 @@
 # Meet2Do
 
+Versión: **0.2.0**
+
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
 whisper.cpp y genera un `TODO.md` con features, bugs y correcciones usando Claude o Codex.
 
@@ -16,6 +18,7 @@ whisper.cpp y genera un `TODO.md` con features, bugs y correcciones usando Claud
 go build -o meet2do .
 ./meet2do                 # modelo whisper "small", idioma autodetectado
 ./meet2do -model medium -lang es
+./meet2do -version
 ```
 
 Flujo: eliges la IA → inicias la grabación (micrófono + audio del sistema) → Enter/q para

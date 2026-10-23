@@ -20,10 +20,19 @@ import (
 	"meet2do/internal/ui"
 )
 
+// version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
+const version = "0.2.0"
+
 func main() {
 	model := flag.String("model", "small", "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
 	lang := flag.String("lang", "auto", "idioma de la reunión para whisper (auto, es, en, ...)")
+	showVersion := flag.Bool("version", false, "muestra la versión y termina")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("meet2do", version)
+		return
+	}
 
 	if err := run(*model, *lang); err != nil {
 		if errors.Is(err, ui.ErrAborted) {
