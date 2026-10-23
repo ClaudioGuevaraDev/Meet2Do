@@ -6,10 +6,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,17 +20,31 @@ import (
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/recorder"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/transcriber"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ui"
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/uninstall"
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.7.0"
+const version = "0.8.0"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
 	lang := flag.String("lang", transcriber.DefaultLang, "idioma de la reunión para whisper (auto, es, en, ...)")
 	showVersion := flag.Bool("version", false, "muestra la versión y termina")
 	setupOnly := flag.Bool("setup", false, "descarga los componentes necesarios (whisper.cpp y el modelo) y termina")
+	flag.Usage = usage
 	flag.Parse()
+
+	// Subcomandos: por ahora solo "uninstall".
+	uninstallApp := false
+	switch args := flag.Args(); {
+	case len(args) == 0:
+	case len(args) == 1 && args[0] == "uninstall":
+		uninstallApp = true
+	default:
+		fmt.Fprintf(os.Stderr, "comando desconocido: %s\n\n", strings.Join(args, " "))
+		usage()
+		os.Exit(2)
+	}
 
 	if *showVersion {
 		fmt.Println("meet2do", version)
@@ -36,7 +52,12 @@ func main() {
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	err := run(ctx, *model, *lang, *setupOnly)
+	var err error
+	if uninstallApp {
+		err = runUninstall()
+	} else {
+		err = run(ctx, *model, *lang, *setupOnly)
+	}
 	stop()
 	if err != nil {
 		if errors.Is(err, ui.ErrAborted) || errors.Is(err, context.Canceled) {
@@ -51,6 +72,15 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// usage muestra la ayuda (-h): el subcomando y los flags.
+func usage() {
+	// Si no se puede escribir la ayuda no hay nada más que hacer.
+	_, _ = fmt.Fprint(flag.CommandLine.Output(), "Uso:\n"+
+		"  meet2do [flags]       graba una reunión y genera tareas y resumen\n"+
+		"  meet2do uninstall     desinstala Meet2Do y lo que descargó (whisper.cpp y los modelos)\n\nFlags:\n")
+	flag.PrintDefaults()
 }
 
 // session agrupa el estado que comparten los pasos del flujo.
@@ -333,4 +363,55 @@ func (s *session) generate(ctx context.Context, d aiDoc, transcript string) (str
 		return err
 	})
 	return content, err
+}
+
+// runUninstall muestra lo instalado, pregunta qué borrar y lo borra.
+func runUninstall() error {
+	ui.Banner(version)
+	cs, err := uninstall.Find()
+	if err != nil {
+		return ui.Fail("No se pudo revisar qué está instalado.", err)
+	}
+	if len(cs) == 0 {
+		ui.Info("No hay nada de Meet2Do instalado")
+		return nil
+	}
+	chosen, err := ui.ChooseUninstall(cs)
+	if err != nil {
+		return err
+	}
+	ok, err := ui.Confirm("¿Desinstalar lo seleccionado?", "Esto no se puede deshacer.", false)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ui.ErrAborted
+	}
+
+	var freed int64
+	var errs []error
+	binaryRemoved := false
+	for _, c := range chosen {
+		if err := uninstall.Remove(c); err != nil {
+			if errors.Is(err, fs.ErrPermission) {
+				err = fmt.Errorf("%w (bórralo con: sudo rm -r %s)", err, c.Path)
+			}
+			errs = append(errs, err)
+			continue
+		}
+		freed += c.Size
+		binaryRemoved = binaryRemoved || c.Name == uninstall.App
+		ui.Success("Eliminado " + c.Name + " · " + ui.FormatBytes(c.Size))
+	}
+	uninstall.Cleanup()
+	if len(errs) > 0 {
+		return ui.Fail("No se pudo desinstalar todo.", errors.Join(errs...))
+	}
+	fmt.Println()
+	if binaryRemoved {
+		ui.Success("Meet2Do se desinstaló · se liberaron " + ui.FormatBytes(freed))
+	} else {
+		ui.Success("Se liberaron " + ui.FormatBytes(freed))
+	}
+	return nil
 }

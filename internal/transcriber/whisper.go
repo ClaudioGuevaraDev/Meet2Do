@@ -51,13 +51,36 @@ func (w *Whisper) lang() string { return cmp.Or(w.Lang, DefaultLang) }
 // ModelSize es el tamaño aproximado de descarga del modelo (0 si se desconoce).
 func (w *Whisper) ModelSize() int64 { return modelSizes[w.ModelName()] }
 
-// ModelPath es la ruta local del modelo en la caché del usuario.
-func (w *Whisper) ModelPath() (string, error) {
+// CacheDir es la carpeta donde Meet2Do guarda lo que descarga ($XDG_CACHE_HOME/meet2do).
+func CacheDir() (string, error) {
 	dir, err := os.UserCacheDir()
 	if err != nil {
 		return "", fmt.Errorf("directorio de caché: %w", err)
 	}
-	return filepath.Join(dir, "meet2do", "models", "ggml-"+w.ModelName()+".bin"), nil
+	return filepath.Join(dir, "meet2do"), nil
+}
+
+// ModelsDir es la carpeta de los modelos de voz descargados.
+func ModelsDir() (string, error) { return cacheSubdir("models") }
+
+// WhisperDir es la carpeta de los builds de whisper.cpp descargados (uno por versión).
+func WhisperDir() (string, error) { return cacheSubdir("whisper") }
+
+func cacheSubdir(name string) (string, error) {
+	dir, err := CacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
+}
+
+// ModelPath es la ruta local del modelo en la caché del usuario.
+func (w *Whisper) ModelPath() (string, error) {
+	dir, err := ModelsDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "ggml-"+w.ModelName()+".bin"), nil
 }
 
 // ModelExists indica si el modelo ya está descargado.

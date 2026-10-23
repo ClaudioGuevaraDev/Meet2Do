@@ -18,6 +18,7 @@ import (
 
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ai"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/uninstall"
 )
 
 func TestPalette(t *testing.T) {
@@ -397,5 +398,36 @@ func TestOutputSelectDefaults(t *testing.T) {
 	}
 	if !slices.Equal(kinds, []output.Kind{output.Tasks, output.Summary}) {
 		t.Errorf("default kinds = %v", kinds)
+	}
+}
+
+func TestUninstallSelect(t *testing.T) {
+	t.Parallel()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("sin home")
+	}
+	cs := []uninstall.Component{
+		{Name: uninstall.App, Path: "/usr/local/bin/meet2do", Size: 10 << 20},
+		{Name: uninstall.Whisper, Path: filepath.Join(home, ".cache/meet2do/whisper"), Size: 20 << 20},
+		{Name: uninstall.Models, Path: filepath.Join(home, ".cache/meet2do/models"), Detail: "small", Size: 465 << 20},
+	}
+	var idx []int
+	f := huh.NewForm(huh.NewGroup(uninstallSelect(cs, &idx))).WithTheme(theme()).WithKeyMap(keymap())
+	f.Init()
+	f.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	view := ansi.Strip(f.View())
+	for _, w := range []string{
+		"Tus reuniones guardadas no se borran",
+		"[x] Meet2Do", "/usr/local/bin/meet2do · 10.0 MB",
+		"[x] whisper.cpp", "~/.cache/meet2do/whisper · 20.0 MB",
+		"[x] Modelos de voz", "~/.cache/meet2do/models (small) · 465.0 MB",
+	} {
+		if !strings.Contains(view, w) {
+			t.Errorf("view should contain %q:\n%s", w, view)
+		}
+	}
+	if !slices.Equal(idx, []int{0, 1, 2}) {
+		t.Errorf("all components should be selected by default, got %v", idx)
 	}
 }

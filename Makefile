@@ -1,7 +1,7 @@
 BIN      := bin/meet2do
 PKG      := ./cmd/meet2do
 # Paquetes con cobertura exigida (ui y cmd requieren una terminal interactiva).
-COVERPKG := ./internal/ai/... ./internal/output/... ./internal/recorder/... ./internal/transcriber/...
+COVERPKG := ./internal/ai/... ./internal/output/... ./internal/recorder/... ./internal/transcriber/... ./internal/uninstall/...
 # Código que solo se puede probar con un servidor de audio real (ver test-integration).
 COVEREXCLUDE := /internal/recorder/pulse.go:
 MINCOVER := 80

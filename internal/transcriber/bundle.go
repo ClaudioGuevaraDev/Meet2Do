@@ -62,11 +62,11 @@ func BundleSize() int64 { return bundles[runtime.GOARCH].size }
 
 // binaryDir es la carpeta en caché donde vive el bundle de esta versión.
 func binaryDir() (string, error) {
-	dir, err := os.UserCacheDir()
+	dir, err := WhisperDir()
 	if err != nil {
-		return "", fmt.Errorf("directorio de caché: %w", err)
+		return "", err
 	}
-	return filepath.Join(dir, "meet2do", "whisper", BundleTag), nil
+	return filepath.Join(dir, BundleTag), nil
 }
 
 // override es el whisper-cli indicado explícitamente (Whisper.Binary o MEET2DO_WHISPER).

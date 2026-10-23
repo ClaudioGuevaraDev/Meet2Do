@@ -12,6 +12,7 @@ import (
 
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ai"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/uninstall"
 )
 
 // ErrAborted indica que el usuario canceló un formulario (Ctrl+C / Esc).
@@ -189,6 +190,56 @@ func outputSelect(kinds *[]output.Kind) *huh.MultiSelect[output.Kind] {
 // que al marcarlo solo el nombre toma el color de selección.
 func outputLabel(k output.Kind, desc string) string {
 	return optionLabel(output.FileName(k), desc)
+}
+
+// uninstallSelect arma la lista de qué desinstalar, todo marcado de entrada; idx recibe los
+// índices elegidos de cs.
+func uninstallSelect(cs []uninstall.Component, idx *[]int) *huh.MultiSelect[int] {
+	opts := make([]huh.Option[int], len(cs))
+	*idx = make([]int, len(cs))
+	for i, c := range cs {
+		desc := homePath(c.Path)
+		if c.Detail != "" {
+			desc += " (" + c.Detail + ")"
+		}
+		opts[i] = huh.NewOption(optionLabel(c.Name, desc+" · "+FormatBytes(c.Size)), i).Selected(true)
+		(*idx)[i] = i
+	}
+	return huh.NewMultiSelect[int]().
+		Title("¿Qué quieres desinstalar?").
+		Description("Tus reuniones guardadas no se borran").
+		Options(opts...).
+		Validate(func(k []int) error {
+			if len(k) == 0 {
+				return errors.New("elige al menos una opción")
+			}
+			return nil
+		}).
+		Value(idx)
+}
+
+// ChooseUninstall pregunta qué componentes desinstalar (todos marcados por defecto).
+func ChooseUninstall(cs []uninstall.Component) ([]uninstall.Component, error) {
+	var idx []int
+	if err := run(uninstallSelect(cs, &idx)); err != nil {
+		return nil, err
+	}
+	slices.Sort(idx)
+	chosen := make([]uninstall.Component, len(idx))
+	for i, n := range idx {
+		chosen[i] = cs[n]
+	}
+	return chosen, nil
+}
+
+// homePath abrevia el home del usuario como ~.
+func homePath(p string) string {
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if rel, err := filepath.Rel(home, p); err == nil && !strings.HasPrefix(rel, "..") {
+			return filepath.Join("~", rel)
+		}
+	}
+	return p
 }
 
 // ChooseDir pregunta dónde guardar los archivos (por defecto la carpeta actual).
