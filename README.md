@@ -1,6 +1,6 @@
 # Meet2Do
 
-Versión: **0.9.0**
+Versión: **0.10.0**
 
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
 whisper.cpp y genera con Claude o Codex una lista de tareas (`tareas.md`) con features, bugs y
@@ -13,13 +13,37 @@ descarga solo la primera vez, con una barra de progreso que indica qué se está
 
 - Linux (x86-64 o ARM64) con PulseAudio o PipeWire (lo traen todos los escritorios)
 - `claude` y/o `codex` CLI instalados y autenticados
-- Go 1.24.2+ solo para compilar desde el código fuente
 
 ## Instalación
 
 ```sh
-go install github.com/ClaudioGuevaraDev/Meet2Do/cmd/...@latest   # instala meet2do y su atajo m2do
-meet2do -setup            # opcional: deja todo descargado ahora (~476 MB con el modelo small)
+curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | sh
+```
+
+El instalador descarga el binario de la última versión desde
+[GitHub Releases](https://github.com/ClaudioGuevaraDev/Meet2Do/releases), verifica su SHA-256 y
+lo instala en `~/.local/bin` (sin sudo) junto con el atajo `m2do`. Si esa carpeta no está en tu
+`PATH`, te muestra la línea para agregarla. Para **actualizar**, vuelve a ejecutarlo.
+
+Opciones (variables de entorno, antes de `sh`):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | MEET2DO_VERSION=v0.10.0 sh
+curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | MEET2DO_INSTALL_DIR=/opt/bin sh
+```
+
+### Alternativa: con Go
+
+Si tienes Go 1.24.2+:
+
+```sh
+go install github.com/ClaudioGuevaraDev/Meet2Do/cmd/...@latest   # instala meet2do y m2do en ~/go/bin
+```
+
+### Primera ejecución
+
+```sh
+m2do -setup               # opcional: deja todo descargado ahora (~476 MB con el modelo small)
 ```
 
 Si te saltas `-setup`, la primera ejecución muestra la misma pantalla de instalación antes

@@ -152,6 +152,43 @@ func TestRemoveAndCleanup(t *testing.T) {
 	}
 }
 
+// install.sh instala m2do como symlink a meet2do: correr cualquiera de los dos debe ofrecer
+// borrar ambos, y borrar el link (no su destino dos veces).
+func TestFindSymlinkAlias(t *testing.T) {
+	for _, exe := range []string{"bin/meet2do", "bin/m2do"} {
+		t.Run(filepath.Base(exe), func(t *testing.T) {
+			root := setup(t, map[string]int{"bin/meet2do": 100})
+			if err := os.Symlink("meet2do", filepath.Join(root, "bin/m2do")); err != nil {
+				t.Fatal(err)
+			}
+			uninstall.SetExecutable(t, filepath.Join(root, exe))
+
+			cs, err := uninstall.Find()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(cs) != 1 || cs[0].Size != 100 {
+				t.Fatalf("Find = %+v; want one component of 100 bytes", cs)
+			}
+			var names []string
+			for _, p := range cs[0].Paths {
+				names = append(names, filepath.Base(p))
+			}
+			if got := strings.Join(names, ","); got != "meet2do,m2do" {
+				t.Errorf("paths = %s; want meet2do,m2do (the link resolves to meet2do)", got)
+			}
+			if err := uninstall.Remove(cs[0]); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"meet2do", "m2do"} {
+				if _, err := os.Lstat(filepath.Join(root, "bin", name)); !os.IsNotExist(err) {
+					t.Errorf("%s should be gone (lstat err %v)", name, err)
+				}
+			}
+		})
+	}
+}
+
 func TestRemoveError(t *testing.T) {
 	dir := t.TempDir()
 	locked := filepath.Join(dir, "locked")

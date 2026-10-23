@@ -26,6 +26,12 @@ golangci-lint isn't installed locally; run it with `go run github.com/golangci/g
 
 The app must stay **all-in-one**: users only need `claude` or `codex` on PATH. Never add a "please install X" requirement — anything else is pure Go or downloaded on first run (checksum-pinned, into `$XDG_CACHE_HOME/meet2do/`) through the install screen. Set `MEET2DO_WHISPER=/path/to/whisper-cli` to use a local whisper.cpp during development. The interactive UI needs a real TTY; to drive it from a non-interactive shell use a pty (e.g. `script -qfec "bin/meet2do -setup -model tiny" log`) with an isolated `XDG_CACHE_HOME`.
 
+## Releases and installation
+
+`install.sh` (repo root, POSIX sh, Spanish messages) is the primary install path: `curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | sh`. It downloads `meet2do-linux-<amd64|arm64>.tar.gz` + `checksums.txt` from GitHub Releases (`latest` or `MEET2DO_VERSION`), verifies the SHA-256, installs `meet2do` into `MEET2DO_INSTALL_DIR` (default `~/.local/bin`) and creates `m2do` as a symlink. `MEET2DO_DOWNLOAD_URL` overrides the source — to test locally: `make dist`, `python3 -m http.server` in `dist/`, then `MEET2DO_DOWNLOAD_URL=http://127.0.0.1:<port> MEET2DO_INSTALL_DIR=/tmp/x sh install.sh`.
+
+`make dist` builds static (`CGO_ENABLED=0`) binaries; asset names carry no version so `releases/latest/download/<asset>` always works. `.github/workflows/release.yml` runs on every push to `main`: if the `version` constant has no `v<version>` tag yet, it runs the tests, `make dist` and `gh release create` (which creates the tag). So bumping the version via `/conventional-commit` and pushing publishes a release; never create those tags by hand. `go install …/cmd/...@latest` remains the alternative.
+
 ## Architecture
 
 `cmd/meet2do` and `cmd/m2do` are one-line `main`s that call `cli.Main()`; `go install …/cmd/...@latest` installs both. `internal/cli/cli.go` is a linear orchestrator: a `session` struct carries state through small step methods (check `claude`/`codex` → `setup` (install screen for whatever is missing) → choose AI → record → choose outputs and folder → (transcribe) → (generate tasks) → write files). `-setup` runs only the install step; the `uninstall` subcommand runs `runUninstall` instead (no `claude`/`codex` needed). The root context comes from `signal.NotifyContext`. Each step lives in its own package under `internal/`:
