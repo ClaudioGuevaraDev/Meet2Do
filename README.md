@@ -9,7 +9,7 @@
 [![Go](https://img.shields.io/github/go-mod/go-version/ClaudioGuevaraDev/Meet2Do?style=flat-square)](go.mod)
 ![Linux](https://img.shields.io/badge/Linux-x86--64%20%7C%20ARM64-3B82F6?style=flat-square&logo=linux&logoColor=white)
 
-Versión: **0.11.4**
+Versión: **1.0.0**
 
 [Características](#características) • [Instalación](#instalación) • [Uso](#uso) • [Desinstalación](#desinstalación) • [Desarrollo](#desarrollo)
 
