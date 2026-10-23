@@ -1,5 +1,6 @@
 bin/
 coverage.out
+coverage.raw
 TODO.md
 transcripcion.md
 reunion.wav

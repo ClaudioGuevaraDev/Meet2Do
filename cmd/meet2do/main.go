@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -23,15 +22,13 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.2.3"
-
-// errNoFFmpeg indica que ffmpeg no está en el PATH.
-var errNoFFmpeg = errors.New("ffmpeg no está instalado (sudo apt install ffmpeg)")
+const version = "0.3.0"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
 	lang := flag.String("lang", transcriber.DefaultLang, "idioma de la reunión para whisper (auto, es, en, ...)")
 	showVersion := flag.Bool("version", false, "muestra la versión y termina")
+	setupOnly := flag.Bool("setup", false, "descarga los componentes necesarios (whisper.cpp y el modelo) y termina")
 	flag.Parse()
 
 	if *showVersion {
@@ -40,7 +37,7 @@ func main() {
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	err := run(ctx, *model, *lang)
+	err := run(ctx, *model, *lang, *setupOnly)
 	stop()
 	if err != nil {
 		if errors.Is(err, ui.ErrAborted) || errors.Is(err, context.Canceled) {
@@ -64,14 +61,23 @@ type session struct {
 	written  []string
 }
 
-func run(ctx context.Context, model, lang string) error {
+func run(ctx context.Context, model, lang string, setupOnly bool) error {
 	ui.Banner()
 
-	s := &session{}
-	if err := s.checkDependencies(model, lang); err != nil {
+	s := &session{whisper: &transcriber.Whisper{Model: model, Lang: lang}}
+	if setupOnly {
+		return s.setup(ctx, true)
+	}
+
+	// Primero lo que no se puede descargar: sin claude/codex no tiene sentido instalar nada.
+	providers, err := ai.Available()
+	if err != nil {
 		return err
 	}
-	if err := s.chooseProvider(); err != nil {
+	if err = s.setup(ctx, false); err != nil {
+		return err
+	}
+	if err = s.chooseProvider(providers); err != nil {
 		return err
 	}
 
@@ -99,28 +105,68 @@ func run(ctx context.Context, model, lang string) error {
 	return nil
 }
 
-func (s *session) checkDependencies(model, lang string) error {
-	if _, err := exec.LookPath("ffmpeg"); err != nil {
-		return errNoFFmpeg
+// setup descarga lo que falte (whisper.cpp y el modelo) mostrando la pantalla de instalación.
+func (s *session) setup(ctx context.Context, verbose bool) error {
+	downloads := s.pendingDownloads()
+	if len(downloads) == 0 {
+		if verbose {
+			ui.Success("Todo está instalado; Meet2Do está listo para usarse")
+		}
+		return nil
 	}
-	bin, err := transcriber.FindBinary()
-	if err != nil {
+	ui.Info(fmt.Sprintf("Primera ejecución: Meet2Do descargará los componentes necesarios (~%s). Esto ocurre una sola vez.",
+		ui.FormatBytes(ui.TotalSize(downloads))))
+	if err := ui.Install(ctx, downloads); err != nil {
 		return err
 	}
-	s.whisper = &transcriber.Whisper{Binary: bin, Model: model, Lang: lang}
+	ui.Success("Componentes instalados")
 	return nil
 }
 
-func (s *session) chooseProvider() error {
-	providers, err := ai.Available()
-	if err != nil {
-		return err
+func (s *session) pendingDownloads() []ui.Download {
+	w := s.whisper
+	var downloads []ui.Download
+	if w.NeedsBinary() {
+		downloads = append(downloads, ui.Download{
+			Name:   "whisper.cpp " + transcriber.BundleTag,
+			Detail: "motor de transcripción",
+			Size:   transcriber.BundleSize(),
+			Run: func(ctx context.Context, progress func(done, total int64), phase func(string)) error {
+				_, err := w.EnsureBinary(ctx, progress, func(p transcriber.Phase) { phase(phaseLabel(p)) })
+				return err
+			},
+		})
 	}
+	if !w.ModelExists() {
+		downloads = append(downloads, ui.Download{
+			Name:   "Modelo de voz " + w.ModelName(),
+			Detail: "reconocimiento de voz",
+			Size:   w.ModelSize(),
+			Run: func(ctx context.Context, progress func(done, total int64), _ func(string)) error {
+				return w.DownloadModel(ctx, progress)
+			},
+		})
+	}
+	return downloads
+}
+
+func phaseLabel(p transcriber.Phase) string {
+	switch p {
+	case transcriber.PhaseVerifying:
+		return "Verificando integridad (SHA-256)"
+	case transcriber.PhaseExtracting:
+		return "Extrayendo"
+	}
+	return "Procesando"
+}
+
+func (s *session) chooseProvider(providers []ai.Provider) error {
 	if len(providers) == 1 {
 		s.provider = providers[0]
 		ui.Info("Usando " + s.provider.Name() + " (único CLI disponible)")
 		return nil
 	}
+	var err error
 	s.provider, err = ui.ChooseProvider(providers)
 	return err
 }
@@ -221,21 +267,7 @@ func (s *session) save(path string, err error) error {
 }
 
 func (s *session) transcribe(ctx context.Context) (string, error) {
-	w := s.whisper
-	if !w.ModelExists() {
-		title := fmt.Sprintf("Descargando modelo de whisper (%s)…", w.Model)
-		err := ui.Spin(ctx, title, "Modelo "+w.Model+" descargado", func(ctx context.Context, status ui.Status) error {
-			return w.DownloadModel(ctx, func(done, total int64) {
-				if total > 0 {
-					status(fmt.Sprintf("Descargando modelo de whisper (%s)… %d%%", w.Model, done*100/total))
-				}
-			})
-		})
-		if err != nil {
-			return "", err
-		}
-	}
-
+	w := s.whisper // whisper.cpp y el modelo ya se descargaron en setup
 	var transcript string
 	err := ui.Spin(ctx, "Transcribiendo audio con whisper.cpp…", "Audio transcrito", func(ctx context.Context, _ ui.Status) error {
 		var err error

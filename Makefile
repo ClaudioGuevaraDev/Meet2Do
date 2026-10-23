@@ -2,9 +2,11 @@ BIN      := bin/meet2do
 PKG      := ./cmd/meet2do
 # Paquetes con cobertura exigida (ui y cmd requieren una terminal interactiva).
 COVERPKG := ./internal/ai/... ./internal/output/... ./internal/recorder/... ./internal/transcriber/...
+# Código que solo se puede probar con un servidor de audio real (ver test-integration).
+COVEREXCLUDE := /internal/recorder/pulse.go:
 MINCOVER := 80
 
-.PHONY: build run test test-race cover cover-check lint fmt tidy clean
+.PHONY: build run setup test test-race test-integration cover cover-check lint fmt tidy clean
 
 build:
 	go build -o $(BIN) $(PKG)
@@ -12,14 +14,22 @@ build:
 run:
 	go run $(PKG)
 
+setup:
+	go run $(PKG) -setup
+
 test:
 	go test ./...
 
 test-race:
 	go test -race ./...
 
+# Graba unos segundos con PulseAudio/PipeWire real (no corre en CI).
+test-integration:
+	go test -tags integration -count=1 -v ./internal/recorder/
+
 cover:
-	go test -coverprofile=coverage.out $(COVERPKG)
+	go test -coverprofile=coverage.raw $(COVERPKG)
+	grep -v '$(COVEREXCLUDE)' coverage.raw > coverage.out
 	go tool cover -func=coverage.out
 
 cover-check: cover
@@ -38,4 +48,4 @@ tidy:
 	go mod verify
 
 clean:
-	rm -rf bin coverage.out
+	rm -rf bin coverage.raw coverage.out

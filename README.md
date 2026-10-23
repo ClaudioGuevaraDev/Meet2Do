@@ -1,30 +1,40 @@
 # Meet2Do
 
-Versión: **0.2.3**
+Versión: **0.3.0**
 
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
 whisper.cpp y genera un `TODO.md` con features, bugs y correcciones usando Claude o Codex.
 
-## Requisitos (Linux)
+Es todo en uno: no necesitas instalar ffmpeg, whisper.cpp ni modelos. Lo que falta se
+descarga solo la primera vez, con una barra de progreso que indica qué se está descargando.
 
-- Go 1.24.2+
-- `ffmpeg` con soporte PulseAudio (funciona sobre PipeWire vía `pipewire-pulse`)
-- [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (`whisper-cli` en el PATH, o la ruta en `MEET2DO_WHISPER`)
+## Requisitos
+
+- Linux (x86-64 o ARM64) con PulseAudio o PipeWire (lo traen todos los escritorios)
 - `claude` y/o `codex` CLI instalados y autenticados
+- Go 1.24.2+ solo para compilar desde el código fuente
 
 ## Instalación
 
 ```sh
 go install github.com/ClaudioGuevaraDev/Meet2Do/cmd/meet2do@latest
-# o desde el repo:
-make build                # genera bin/meet2do
+meet2do -setup            # opcional: deja todo descargado ahora (~476 MB con el modelo small)
 ```
+
+Si te saltas `-setup`, la primera ejecución muestra la misma pantalla de instalación antes
+de empezar a grabar. Se descargan, en `~/.cache/meet2do/`:
+
+| Componente | Para qué | Tamaño |
+|---|---|---|
+| whisper.cpp `b5454` (build oficial, verificado con SHA-256) | motor de transcripción | ~10 MB |
+| Modelo de voz (`small` por defecto) | reconocimiento de voz | ~465 MB |
 
 ## Uso
 
 ```sh
 meet2do                   # modelo whisper "small", idioma autodetectado
 meet2do -model medium -lang es
+meet2do -setup            # descarga lo que falte y termina
 meet2do -version
 ```
 
@@ -32,7 +42,7 @@ Flujo: eliges la IA → inicias la grabación (micrófono + audio del sistema) �
 terminar → eliges qué archivos generar (`TODO.md`, `transcripcion.md`, `reunion.wav`) →
 eliges la carpeta (por defecto la actual).
 
-El modelo de whisper se descarga la primera vez en `~/.cache/meet2do/models/`.
+Si cambias de modelo con `-model`, el nuevo se descarga la próxima vez que lo uses.
 
 ## Desarrollo
 
@@ -40,5 +50,6 @@ El modelo de whisper se descarga la primera vez en `~/.cache/meet2do/models/`.
 make test         # tests
 make test-race    # tests con detector de carreras
 make cover-check  # cobertura (mínimo 80% en internal/, salvo ui)
+make test-integration  # graba unos segundos con tu servidor de audio real
 make lint         # go vet + golangci-lint
 ```

@@ -1,131 +1,212 @@
-// Package recorder captura micrófono + audio del sistema con ffmpeg (PulseAudio/PipeWire).
+// Package recorder graba micrófono + audio del sistema a un WAV 16 kHz mono, en Go puro
+// (habla directamente con PulseAudio/PipeWire, sin ffmpeg).
 package recorder
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"strings"
-	"syscall"
+	"sync"
 	"time"
 )
 
 const (
-	// DefaultMic es la fuente de entrada por defecto del servidor Pulse.
-	DefaultMic = "default"
-	// DefaultMonitor es el monitor del sink por defecto (lo que suena en parlantes/audífonos).
-	DefaultMonitor = "@DEFAULT_MONITOR@"
+	// SampleRate es la frecuencia de muestreo de la grabación (la que espera whisper).
+	SampleRate = 16000
 
-	// wavHeaderSize es el tamaño de la cabecera de un WAV PCM; un archivo de ese tamaño no tiene audio.
-	wavHeaderSize = 44
-	// startupGrace es cuánto se espera para detectar que ffmpeg murió al iniciar.
-	startupGrace = 500 * time.Millisecond
+	// mixInterval es cada cuánto se mezclan y escriben a disco las muestras recibidas.
+	mixInterval = 100 * time.Millisecond
+	// maxLag es cuánto puede adelantarse una fuente a la otra antes de rellenar la atrasada
+	// con silencio (p. ej. el monitor no entrega datos mientras no suena nada).
+	maxLag = 2 * SampleRate
 )
 
 var (
 	// ErrNotStarted se devuelve al llamar Stop sin un Start exitoso.
 	ErrNotStarted = errors.New("la grabación no fue iniciada")
-	// ErrEmptyRecording se devuelve cuando el WAV resultante no contiene audio.
+	// ErrEmptyRecording se devuelve cuando la grabación no contiene audio.
 	ErrEmptyRecording = errors.New("la grabación quedó vacía")
 )
 
-// Recorder controla un proceso ffmpeg que graba a un WAV 16 kHz mono.
+// Source entrega muestras PCM int16 mono a SampleRate mientras está iniciada.
+type Source interface {
+	// Start comienza a llamar write con cada bloque de muestras (write copia los datos).
+	Start(write func([]int16)) error
+	// Close detiene la fuente; después no se vuelve a llamar write.
+	Close() error
+}
+
+// Recorder mezcla dos fuentes (micrófono y sistema) y las escribe a un WAV.
 type Recorder struct {
-	Mic     string
-	Monitor string
-	Output  string
+	Output string
 
-	cmd    *exec.Cmd
-	stdin  io.WriteCloser
-	stderr bytes.Buffer
-	done   chan error
+	open func() (mic, monitor Source, release func(), err error)
+
+	mu      sync.Mutex
+	bufs    [2][]int16
+	sources [2]Source
+	release func()
+	wav     *wavWriter
+	quit    chan struct{}
+	done    chan error
 }
 
-// New crea un Recorder con las fuentes por defecto.
+// New crea un Recorder que graba el micrófono y el audio del sistema por defecto.
 func New(output string) *Recorder {
-	return &Recorder{Mic: DefaultMic, Monitor: DefaultMonitor, Output: output}
+	return &Recorder{Output: output, open: openPulse}
 }
 
-// Args devuelve los argumentos de ffmpeg.
-func (r *Recorder) Args() []string {
-	return []string{
-		"-hide_banner", "-loglevel", "error", "-nostats", "-y",
-		"-f", "pulse", "-i", r.Mic,
-		"-f", "pulse", "-i", r.Monitor,
-		"-filter_complex", "amix=inputs=2:duration=longest:normalize=0",
-		"-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le",
-		r.Output,
-	}
+// NewWithSources crea un Recorder con fuentes propias (útil para tests).
+func NewWithSources(output string, mic, monitor Source) *Recorder {
+	return &Recorder{Output: output, open: func() (Source, Source, func(), error) {
+		return mic, monitor, func() {}, nil
+	}}
 }
 
-// Start lanza ffmpeg. Devuelve error si el proceso muere en el primer instante
-// (p. ej. dispositivo inexistente).
+// Start abre las fuentes y comienza a grabar.
 func (r *Recorder) Start() error {
-	r.cmd = exec.Command("ffmpeg", r.Args()...)
-	r.cmd.Stderr = &r.stderr
-	// Evita que Ctrl+C en la terminal mate ffmpeg antes de cerrar el WAV.
-	r.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdin, err := r.cmd.StdinPipe()
+	mic, monitor, release, err := r.open()
 	if err != nil {
-		return fmt.Errorf("ffmpeg stdin: %w", err)
+		return err
 	}
-	r.stdin = stdin
-	if err := r.cmd.Start(); err != nil {
-		r.cmd = nil
-		return fmt.Errorf("iniciar ffmpeg: %w", err)
+	wav, err := createWAV(r.Output, SampleRate)
+	if err != nil {
+		release()
+		return err
 	}
-	r.done = make(chan error, 1)
-	go func() { r.done <- r.cmd.Wait() }()
 
-	select {
-	case err := <-r.done:
-		r.cmd = nil
-		return fmt.Errorf("ffmpeg terminó inesperadamente: %w: %s", err, r.stderrText())
-	case <-time.After(startupGrace):
-		return nil
+	r.bufs = [2][]int16{}
+	r.sources = [2]Source{mic, monitor}
+	r.release, r.wav = release, wav
+	for i, src := range r.sources {
+		if err := src.Start(r.appender(i)); err != nil {
+			r.abort()
+			return fmt.Errorf("iniciar captura de audio: %w", err)
+		}
 	}
+
+	r.quit, r.done = make(chan struct{}), make(chan error, 1)
+	go r.mixLoop()
+	return nil
 }
 
-// Stop pide a ffmpeg que termine limpiamente ("q") para que el WAV quede bien cerrado.
+// Stop detiene la grabación y cierra el WAV.
 func (r *Recorder) Stop() error {
-	if r.cmd == nil {
+	if r.wav == nil {
 		return ErrNotStarted
 	}
-	// Best-effort: si ffmpeg ya terminó, escribir o cerrar stdin falla y no importa;
-	// el resultado real se valida con el tamaño del WAV.
-	_, _ = io.WriteString(r.stdin, "q")
-	_ = r.stdin.Close()
+	srcErr := r.closeSources()
+	close(r.quit)
+	mixErr := <-r.done
+	if mixErr == nil {
+		mixErr = r.flush(true)
+	}
+	samples := r.wav.samples
+	closeErr := r.wav.close()
+	r.wav = nil
 
-	// El código de salida de ffmpeg no es fiable al detenerlo; el resultado se valida
-	// por el tamaño del WAV.
-	_ = r.wait()
-	r.cmd = nil
-
-	info, err := os.Stat(r.Output)
-	if err != nil || info.Size() <= wavHeaderSize {
-		return fmt.Errorf("%w: %s", ErrEmptyRecording, r.stderrText())
+	if err := errors.Join(mixErr, closeErr); err != nil {
+		return fmt.Errorf("escribir %s: %w", r.Output, err)
+	}
+	if samples == 0 {
+		if srcErr != nil {
+			return fmt.Errorf("%w: %w", ErrEmptyRecording, srcErr)
+		}
+		return ErrEmptyRecording
 	}
 	return nil
 }
 
-// wait espera a que ffmpeg termine, escalando a SIGINT y luego Kill si no responde.
-func (r *Recorder) wait() error {
-	select {
-	case err := <-r.done:
-		return err
-	case <-time.After(5 * time.Second):
+func (r *Recorder) appender(i int) func([]int16) {
+	return func(s []int16) {
+		r.mu.Lock()
+		r.bufs[i] = append(r.bufs[i], s...)
+		r.mu.Unlock()
 	}
-	_ = r.cmd.Process.Signal(os.Interrupt) // best-effort, seguido de Kill
-	select {
-	case err := <-r.done:
-		return err
-	case <-time.After(3 * time.Second):
-	}
-	_ = r.cmd.Process.Kill() // el proceso puede haber terminado entre medio
-	return <-r.done
 }
 
-func (r *Recorder) stderrText() string { return strings.TrimSpace(r.stderr.String()) }
+func (r *Recorder) mixLoop() {
+	t := time.NewTicker(mixInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-r.quit:
+			r.done <- nil
+			return
+		case <-t.C:
+			if err := r.flush(false); err != nil {
+				r.done <- err
+				return
+			}
+		}
+	}
+}
+
+// flush mezcla lo que ambas fuentes tienen en común y lo escribe. Con final=true escribe todo,
+// rellenando con silencio la fuente más corta.
+func (r *Recorder) flush(final bool) error {
+	r.mu.Lock()
+	a, b := r.bufs[0], r.bufs[1]
+	n := min(len(a), len(b))
+	if longest := max(len(a), len(b)); final {
+		n = longest
+	} else if longest-n > maxLag {
+		n = longest - maxLag
+	}
+	out := Mix(make([]int16, n), head(a, n), head(b, n))
+	r.bufs[0], r.bufs[1] = tail(a, n), tail(b, n)
+	r.mu.Unlock()
+
+	if n == 0 {
+		return nil
+	}
+	return r.wav.write(out)
+}
+
+func (r *Recorder) closeSources() error {
+	var errs []error
+	for _, src := range r.sources {
+		if src != nil {
+			errs = append(errs, src.Close())
+		}
+	}
+	r.sources = [2]Source{}
+	if r.release != nil {
+		r.release()
+		r.release = nil
+	}
+	return errors.Join(errs...)
+}
+
+// abort deshace un Start a medias.
+func (r *Recorder) abort() {
+	_ = r.closeSources() // ya se informa el error de Start
+	_ = r.wav.close()
+	r.wav = nil
+}
+
+// Mix suma a y b muestra a muestra en dst con saturación int16 y devuelve dst[:n], con
+// n = min(len(dst), len(a), len(b)).
+func Mix(dst, a, b []int16) []int16 {
+	n := min(len(dst), len(a), len(b))
+	for i := range n {
+		s := int32(a[i]) + int32(b[i])
+		dst[i] = int16(max(-32768, min(32767, s)))
+	}
+	return dst[:n]
+}
+
+// head devuelve los primeros n elementos de s, rellenando con ceros si s es más corto.
+func head(s []int16, n int) []int16 {
+	if len(s) >= n {
+		return s[:n]
+	}
+	return append(s[:len(s):len(s)], make([]int16, n-len(s))...)
+}
+
+// tail devuelve lo que queda de s después de los primeros n elementos.
+func tail(s []int16, n int) []int16 {
+	if len(s) <= n {
+		return nil
+	}
+	return append([]int16(nil), s[n:]...)
+}
