@@ -128,10 +128,9 @@ func newInstallModel(downloads []Download) installModel {
 	for i, d := range downloads {
 		items[i] = installItem{Download: d, total: d.Size}
 	}
-	return installModel{
-		items: items,
-		bar:   progress.New(progress.WithSolidFill(string(primary)), progress.WithWidth(32), progress.WithoutPercentage()),
-	}
+	bar := progress.New(progress.WithSolidFill(hex(brand)), progress.WithWidth(32), progress.WithoutPercentage())
+	bar.EmptyColor = hex(faint)
+	return installModel{items: items, bar: bar}
 }
 
 func (m installModel) Init() tea.Cmd { return nil }
@@ -173,7 +172,7 @@ func (m installModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m installModel) View() string {
 	var b strings.Builder
-	b.WriteString("\n" + accentStyle.Render("Instalando componentes de Meet2Do") + Subtle(" · solo la primera vez") + "\n\n")
+	b.WriteString("\n" + brandStyle.Render("Instalando componentes de Meet2Do") + Subtle(" · solo la primera vez") + "\n\n")
 	for _, it := range m.items {
 		b.WriteString(m.itemView(it))
 	}
@@ -193,15 +192,15 @@ func (m installModel) itemView(it installItem) string {
 	case stateFailed:
 		return fmt.Sprintf("  %s %s\n", errorStyle.Render("✘"), title)
 	case stateWorking:
-		return fmt.Sprintf("  %s %s\n    %s %s\n", accentStyle.Render("↓"), title, m.bar.ViewAs(1), Subtle(it.label+"…"))
+		return fmt.Sprintf("  %s %s\n    %s %s\n", brandStyle.Render("↓"), title, m.bar.ViewAs(1), Subtle(it.label+"…"))
 	}
 	pct := 0.0
 	if it.total > 0 {
 		pct = min(1, float64(it.done)/float64(it.total))
 	}
-	return fmt.Sprintf("  %s %s\n    %s %3.0f%%  %s / %s · %s\n",
-		accentStyle.Render("↓"), title, m.bar.ViewAs(pct), pct*100,
-		FormatBytes(it.done), FormatBytes(it.total), FormatSpeed(it.speed))
+	return fmt.Sprintf("  %s %s\n    %s %3.0f%%  %s\n",
+		brandStyle.Render("↓"), title, m.bar.ViewAs(pct), pct*100,
+		Subtle(fmt.Sprintf("%s / %s · %s", formatDone(it.done), FormatBytes(it.total), FormatSpeed(it.speed))))
 }
 
 // FormatBytes muestra un tamaño en KB/MB/GB (base 1024).
@@ -218,6 +217,14 @@ func FormatBytes(n int64) string {
 		return fmt.Sprintf("%.1f MB", float64(n)/(unit*unit))
 	}
 	return fmt.Sprintf("%.2f GB", float64(n)/(unit*unit*unit))
+}
+
+// formatDone muestra los bytes descargados (0 es "0 B", no "desconocido").
+func formatDone(n int64) string {
+	if n <= 0 {
+		return "0 B"
+	}
+	return FormatBytes(n)
 }
 
 // FormatSpeed muestra una velocidad de descarga.

@@ -6,7 +6,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/stopwatch"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+var recDotStyle = lipgloss.NewStyle().Foreground(danger)
 
 type recordingModel struct {
 	sw    stopwatch.Model
@@ -44,12 +47,11 @@ func (m recordingModel) View() string {
 	}
 	elapsed := m.sw.Elapsed().Truncate(time.Second)
 	h, mi, s := int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60
-	body := fmt.Sprintf("%s %s  %s\n\n%s",
-		recStyle.Render(dot),
-		recStyle.Render("GRABANDO"),
-		accentStyle.Render(fmt.Sprintf("%02d:%02d:%02d", h, mi, s)),
-		Subtle("Micrófono + audio del sistema\nPresiona Enter o q para terminar"))
-	return "\n" + boxStyle.Render(body) + "\n"
+	return fmt.Sprintf("\n%s %s  %s\n  %s\n",
+		recDotStyle.Render(dot),
+		lipgloss.NewStyle().Bold(true).Render("Grabando"),
+		brandStyle.Render(fmt.Sprintf("%02d:%02d:%02d", h, mi, s)),
+		Subtle("Micrófono + audio del sistema · Enter para terminar"))
 }
 
 // RecordingScreen muestra el cronómetro hasta que el usuario termina; devuelve la duración.

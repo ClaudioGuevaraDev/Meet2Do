@@ -79,6 +79,7 @@ func ChooseDir() (string, error) {
 	err := run(huh.NewInput().
 		Title("¿Dónde quieres guardarlos?").
 		Description("Deja vacío para usar la carpeta actual").
+		Prompt("› ").
 		Placeholder(".").
 		Value(&dir).
 		Validate(func(s string) error {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Status permite a una tarea actualizar el texto del spinner.
@@ -51,7 +52,7 @@ func Spin(ctx context.Context, title, doneText string, task func(ctx context.Con
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(accentStyle))
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(lipgloss.NewStyle().Foreground(brand)))
 	p := tea.NewProgram(spinnerModel{sp: sp, title: title}, tea.WithContext(ctx))
 	go func() {
 		err := task(ctx, func(s string) { p.Send(statusMsg(s)) })

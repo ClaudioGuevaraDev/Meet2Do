@@ -22,7 +22,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.4.2"
+const version = "0.4.3"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
@@ -62,7 +62,7 @@ type session struct {
 }
 
 func run(ctx context.Context, model, lang string, setupOnly bool) error {
-	ui.Banner()
+	ui.Banner(version)
 
 	s := &session{whisper: &transcriber.Whisper{Model: model, Lang: lang}}
 	if setupOnly {
@@ -278,7 +278,7 @@ func (s *session) transcribe(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if transcript == "" {
-		ui.Error("La transcripción quedó vacía (¿había audio?)")
+		ui.Warn("La transcripción quedó vacía (¿había audio?)")
 	}
 	return transcript, nil
 }
