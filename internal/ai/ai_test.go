@@ -14,7 +14,7 @@ import (
 
 const transcript = "Juan dijo que el login falla."
 
-func TestClaudeGenerateTasks(t *testing.T) {
+func TestClaudeGenerate(t *testing.T) {
 	tests := []struct {
 		name    string
 		script  string
@@ -49,7 +49,7 @@ func TestClaudeGenerateTasks(t *testing.T) {
 			testutil.FakeBin(t, dir, "claude", tt.script)
 			testutil.IsolatedPath(t, dir)
 
-			got, err := ai.Claude{}.GenerateTasks(context.Background(), transcript)
+			got, err := ai.Claude{}.Generate(context.Background(), ai.TasksPrompt, transcript)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -69,22 +69,35 @@ func TestClaudeGenerateTasks(t *testing.T) {
 	}
 }
 
-func TestClaudeReceivesPromptAndTranscript(t *testing.T) {
-	dir := t.TempDir()
-	stdin := filepath.Join(dir, "stdin.txt")
-	args := filepath.Join(dir, "args.txt")
-	testutil.FakeBin(t, dir, "claude", `printf '%s\n' "$@" > `+args+"\ncat > "+stdin+"\necho ok\n")
-	testutil.IsolatedPath(t, dir)
-
-	if _, err := (ai.Claude{}).GenerateTasks(context.Background(), transcript); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	assertFileContains(t, stdin, transcript)
-	assertFileContains(t, args, "-p")
-	assertFileContains(t, args, "Transcripción:")
+// prompts son los prompts reales y una línea que solo aparece en cada uno.
+var prompts = []struct {
+	name, prompt, marker string
+}{
+	{"tasks", ai.TasksPrompt, "# Tareas — "},
+	{"summary", ai.SummaryPrompt, "# Resumen — "},
 }
 
-func TestCodexGenerateTasks(t *testing.T) {
+func TestClaudeReceivesPromptAndTranscript(t *testing.T) {
+	for _, tt := range prompts {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			stdin := filepath.Join(dir, "stdin.txt")
+			args := filepath.Join(dir, "args.txt")
+			testutil.FakeBin(t, dir, "claude", `printf '%s\n' "$@" > `+args+"\ncat > "+stdin+"\necho ok\n")
+			testutil.IsolatedPath(t, dir)
+
+			if _, err := (ai.Claude{}).Generate(context.Background(), tt.prompt, transcript); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			assertFileContains(t, stdin, transcript)
+			assertFileContains(t, args, "-p")
+			assertFileContains(t, args, tt.marker)
+			assertFileContains(t, args, "Transcripción:")
+		})
+	}
+}
+
+func TestCodexGenerate(t *testing.T) {
 	// El script busca el valor de --output-last-message y escribe ahí la respuesta.
 	const writeOut = `while [ $# -gt 0 ]; do [ "$1" = --output-last-message ] && out=$2; shift; done
 cat > /dev/null
@@ -123,7 +136,7 @@ cat > /dev/null
 			testutil.FakeBin(t, dir, "codex", tt.script)
 			testutil.IsolatedPath(t, dir)
 
-			got, err := ai.Codex{}.GenerateTasks(context.Background(), transcript)
+			got, err := ai.Codex{}.Generate(context.Background(), ai.TasksPrompt, transcript)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("got error %v; want one containing %q", err, tt.wantErr)
@@ -141,24 +154,28 @@ cat > /dev/null
 }
 
 func TestCodexReceivesPromptAndTranscriptOnStdin(t *testing.T) {
-	dir := t.TempDir()
-	stdin := filepath.Join(dir, "stdin.txt")
-	testutil.FakeBin(t, dir, "codex", "cat > "+stdin+"\nexit 1\n")
-	testutil.IsolatedPath(t, dir)
+	for _, tt := range prompts {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			stdin := filepath.Join(dir, "stdin.txt")
+			testutil.FakeBin(t, dir, "codex", "cat > "+stdin+"\nexit 1\n")
+			testutil.IsolatedPath(t, dir)
 
-	_, _ = ai.Codex{}.GenerateTasks(context.Background(), transcript) // solo interesa lo recibido
-	assertFileContains(t, stdin, "Transcripción:")
-	assertFileContains(t, stdin, transcript)
+			_, _ = ai.Codex{}.Generate(context.Background(), tt.prompt, transcript) // solo interesa lo recibido
+			assertFileContains(t, stdin, tt.marker)
+			assertFileContains(t, stdin, "Transcripción:\n"+transcript)
+		})
+	}
 }
 
-func TestGenerateTasksCancelled(t *testing.T) {
+func TestGenerateCancelled(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FakeBin(t, dir, "claude", "exec sleep 10\n")
 	testutil.IsolatedPath(t, dir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := (ai.Claude{}).GenerateTasks(ctx, transcript); err == nil {
+	if _, err := (ai.Claude{}).Generate(ctx, ai.TasksPrompt, transcript); err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
 }
@@ -259,7 +276,7 @@ echo ok
 			testutil.FakeBin(t, dir, tt.bin, record)
 			testutil.IsolatedPath(t, dir)
 
-			if _, err := tt.p.GenerateTasks(context.Background(), transcript); err != nil {
+			if _, err := tt.p.Generate(context.Background(), ai.TasksPrompt, transcript); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			data, err := os.ReadFile(filepath.Join(dir, "args.txt"))

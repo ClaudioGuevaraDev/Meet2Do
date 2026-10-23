@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/key"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -234,10 +235,11 @@ func TestDoneText(t *testing.T) {
 	tests := []struct {
 		name    string
 		dir     string
-		wantDir bool
+		wantDir string // "" = no se muestra la carpeta
 	}{
-		{"current dir hides folder", cwd, false},
-		{"other dir shows folder", "/otra/carpeta", true},
+		{"current dir hides folder", cwd, ""},
+		{"folder inside current dir is relative", filepath.Join(cwd, "reunion-2026-10-23_13-07"), "en reunion-2026-10-23_13-07/"},
+		{"other dir is absolute", "/otra/carpeta", "en /otra/carpeta/"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -248,8 +250,11 @@ func TestDoneText(t *testing.T) {
 					t.Errorf("should contain %q:\n%s", w, got)
 				}
 			}
-			if strings.Contains(got, "en "+tt.dir) != tt.wantDir {
-				t.Errorf("folder shown = %v; want %v:\n%s", !tt.wantDir, tt.wantDir, got)
+			if tt.wantDir == "" && strings.Contains(got, "  en ") {
+				t.Errorf("folder should not be shown:\n%s", got)
+			}
+			if tt.wantDir != "" && !strings.Contains(got, "\n  "+tt.wantDir+"\n") {
+				t.Errorf("should show %q:\n%s", tt.wantDir, got)
 			}
 		})
 	}
@@ -367,5 +372,30 @@ func TestGlyphsAreNarrow(t *testing.T) {
 	// Las casillas deben medir lo mismo para que los nombres queden alineados.
 	if a, b := lipgloss.Width(glyphChecked), lipgloss.Width(glyphUnchecked); a != b {
 		t.Errorf("checkbox widths differ: %d vs %d", a, b)
+	}
+}
+
+func TestOutputSelectDefaults(t *testing.T) {
+	t.Parallel()
+	kinds := slices.Clone(defaultOutputs)
+	f := huh.NewForm(huh.NewGroup(outputSelect(&kinds))).WithTheme(theme()).WithKeyMap(keymap())
+	f.Init()
+	// Sin terminal, el formulario no conoce su alto: se lo damos como lo haría bubbletea.
+	f.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	view := ansi.Strip(f.View())
+	want := []string{"[x] tareas.md", "[x] resumen.md", "[ ] transcripcion.md", "[ ] reunion.wav"}
+	last := -1
+	for _, w := range want {
+		i := strings.Index(view, w)
+		if i < 0 {
+			t.Fatalf("view should contain %q:\n%s", w, view)
+		}
+		if i < last {
+			t.Errorf("%q is out of order:\n%s", w, view)
+		}
+		last = i
+	}
+	if !slices.Equal(kinds, []output.Kind{output.Tasks, output.Summary}) {
+		t.Errorf("default kinds = %v", kinds)
 	}
 }

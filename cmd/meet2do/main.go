@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
-	"strings"
 	"syscall"
 	"time"
 
@@ -22,7 +21,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.6.1"
+const version = "0.7.0"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
@@ -106,6 +105,12 @@ func run(ctx context.Context, model, lang string, setupOnly bool) error {
 		return err
 	}
 
+	if len(s.written) == 0 {
+		// Solo se pidieron archivos de la IA y la transcripción quedó vacía.
+		_ = os.Remove(s.dir) // la carpeta está vacía; si no se puede borrar, no es grave
+		ui.Warn("No se generó ningún archivo")
+		return nil
+	}
 	ui.Done(s.dir, s.written)
 	return nil
 }
@@ -231,22 +236,26 @@ func (s *session) chooseDestination() error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("crear carpeta %s: %w", dir, err)
-	}
-
-	existing := output.Existing(dir, kinds)
-	if len(existing) > 0 {
-		ok, err := ui.Confirm("Algunos archivos ya existen. ¿Sobrescribir?", strings.Join(existing, "\n"), false)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return ui.ErrAborted
-		}
+	// Una carpeta nueva por reunión: nunca se sobrescribe nada.
+	if dir, err = output.MeetingDir(dir, s.recorded); err != nil {
+		return ui.Fail("No se pudo crear la carpeta de la reunión.", err)
 	}
 	s.kinds, s.dir = kinds, dir
 	return nil
+}
+
+// aiDoc es un archivo que genera la IA a partir de la transcripción.
+type aiDoc struct {
+	kind       output.Kind
+	prompt     string
+	what       string // "tareas", "resumen": para el texto del spinner
+	done, fail string
+	write      func(dir, content string) (string, error)
+}
+
+var aiDocs = []aiDoc{
+	{output.Tasks, ai.TasksPrompt, "tareas", "Tareas generadas correctamente", "No se pudieron generar las tareas.", output.WriteTasks},
+	{output.Summary, ai.SummaryPrompt, "resumen", "Resumen generado correctamente", "No se pudo generar el resumen.", output.WriteSummary},
 }
 
 func (s *session) wants(k output.Kind) bool { return slices.Contains(s.kinds, k) }
@@ -257,7 +266,8 @@ func (s *session) writeOutputs(ctx context.Context) error {
 			return err
 		}
 	}
-	if !s.wants(output.Tasks) && !s.wants(output.Transcript) {
+	needsAI := slices.ContainsFunc(aiDocs, func(d aiDoc) bool { return s.wants(d.kind) })
+	if !needsAI && !s.wants(output.Transcript) {
 		return nil
 	}
 
@@ -270,15 +280,22 @@ func (s *session) writeOutputs(ctx context.Context) error {
 			return err
 		}
 	}
-	if !s.wants(output.Tasks) || transcript == "" {
+	if transcript == "" {
 		return nil
 	}
-
-	tasks, err := s.generateTasks(ctx, transcript)
-	if err != nil {
-		return err
+	for _, d := range aiDocs {
+		if !s.wants(d.kind) {
+			continue
+		}
+		content, err := s.generate(ctx, d, transcript)
+		if err != nil {
+			return err
+		}
+		if err := s.save(d.write(s.dir, content)); err != nil {
+			return err
+		}
 	}
-	return s.save(output.WriteTasks(s.dir, tasks))
+	return nil
 }
 
 // save registra la ruta escrita por un writer de output.
@@ -307,13 +324,13 @@ func (s *session) transcribe(ctx context.Context) (string, error) {
 	return transcript, nil
 }
 
-func (s *session) generateTasks(ctx context.Context, transcript string) (string, error) {
-	name := s.provider.Label()
-	var tasks string
-	err := ui.Spin(ctx, "Generando tareas con "+name+"…", "Tareas generadas correctamente", "No se pudieron generar las tareas.", func(ctx context.Context, _ ui.Status) error {
+func (s *session) generate(ctx context.Context, d aiDoc, transcript string) (string, error) {
+	title := "Generando " + d.what + " con " + s.provider.Label() + "…"
+	var content string
+	err := ui.Spin(ctx, title, d.done, d.fail, func(ctx context.Context, _ ui.Status) error {
 		var err error
-		tasks, err = s.provider.GenerateTasks(ctx, transcript)
+		content, err = s.provider.Generate(ctx, d.prompt, transcript)
 		return err
 	})
-	return tasks, err
+	return content, err
 }

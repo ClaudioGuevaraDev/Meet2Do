@@ -5,7 +5,6 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +23,7 @@ func TestFileName(t *testing.T) {
 		want string
 	}{
 		{output.Tasks, "tareas.md"},
+		{output.Summary, "resumen.md"},
 		{output.Transcript, "transcripcion.md"},
 		{output.Audio, "reunion.wav"},
 		{output.Kind("otro"), "otro"},
@@ -38,34 +38,65 @@ func TestFileName(t *testing.T) {
 	}
 }
 
-func TestExisting(t *testing.T) {
+func TestMeetingDir(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "tareas.md"), "x")
-	writeFile(t, filepath.Join(dir, "reunion.wav"), "x")
-
+	const name = "reunion-2026-10-23_11-30"
 	tests := []struct {
-		name  string
-		kinds []output.Kind
-		want  []string
+		name     string
+		existing []string // carpetas que ya existen en el padre
+		parent   string   // relativo a la carpeta temporal
+		want     string
 	}{
-		{"none requested", nil, []string{}},
-		{"none exist", []output.Kind{output.Transcript}, []string{}},
-		{"some exist", []output.Kind{output.Tasks, output.Transcript, output.Audio}, []string{"tareas.md", "reunion.wav"}},
+		{name: "creates dated folder", parent: ".", want: name},
+		{name: "creates missing parent", parent: "a/b", want: name},
+		{name: "never reuses a folder", parent: ".", existing: []string{name}, want: name + "-2"},
+		{name: "keeps counting", parent: ".", existing: []string{name, name + "-2"}, want: name + "-3"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := output.Existing(dir, tt.kinds)
-			names := make([]string, 0, len(got))
-			for _, p := range got {
-				names = append(names, filepath.Base(p))
+			parent := filepath.Join(t.TempDir(), tt.parent)
+			for _, d := range tt.existing {
+				if err := os.MkdirAll(filepath.Join(parent, d), 0o755); err != nil {
+					t.Fatal(err)
+				}
 			}
-			if !slices.Equal(names, tt.want) {
-				t.Errorf("got %v; want %v", names, tt.want)
+			got, err := output.MeetingDir(parent, meetingDate)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != filepath.Join(parent, tt.want) {
+				t.Errorf("got %q; want %q", got, filepath.Join(parent, tt.want))
+			}
+			if info, err := os.Stat(got); err != nil || !info.IsDir() {
+				t.Errorf("%s should be a new directory (err %v)", got, err)
 			}
 		})
 	}
+}
+
+func TestMeetingDirParentIsFile(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "archivo")
+	writeFile(t, file, "x")
+	for _, parent := range []string{file, filepath.Join(file, "sub")} {
+		if p, err := output.MeetingDir(parent, meetingDate); err == nil {
+			t.Errorf("MeetingDir(%q) = %q; want error", parent, p)
+		}
+	}
+}
+
+func TestWriteSummary(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p, err := output.WriteSummary(dir, "# Resumen\n")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p != filepath.Join(dir, "resumen.md") {
+		t.Errorf("got path %q", p)
+	}
+	assertFile(t, p, []byte("# Resumen\n"))
 }
 
 func TestWriteTasks(t *testing.T) {
@@ -132,6 +163,7 @@ func TestWriteErrors(t *testing.T) {
 		fn   func() (string, error)
 	}{
 		{"tasks in missing dir", func() (string, error) { return output.WriteTasks(missing, "x") }},
+		{"summary in missing dir", func() (string, error) { return output.WriteSummary(missing, "x") }},
 		{"transcript in missing dir", func() (string, error) { return output.WriteTranscript(missing, "x", meetingDate) }},
 		{"audio in missing dir", func() (string, error) { return output.CopyAudio(missing, src) }},
 		{"audio missing source", func() (string, error) { return output.CopyAudio(t.TempDir(), missing) }},

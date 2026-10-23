@@ -15,7 +15,7 @@ import (
 // ErrNoProvider indica que no hay ningún CLI de IA instalado.
 var ErrNoProvider = errors.New("no se encontró `claude` ni `codex` en el PATH")
 
-// Provider genera una lista de tareas en Markdown a partir de una transcripción.
+// Provider genera documentos en Markdown (tareas, resumen) a partir de una transcripción.
 type Provider interface {
 	Name() string
 	Binary() string
@@ -25,7 +25,8 @@ type Provider interface {
 	Catalog(ctx context.Context) Catalog
 	// With devuelve una copia que usa model y effort ("" = el por defecto del CLI).
 	With(model, effort string) Provider
-	GenerateTasks(ctx context.Context, transcript string) (string, error)
+	// Generate ejecuta prompt (TasksPrompt, SummaryPrompt…) sobre transcript.
+	Generate(ctx context.Context, prompt, transcript string) (string, error)
 }
 
 // Model es un modelo que se puede elegir y los niveles de esfuerzo que admite.
@@ -117,8 +118,8 @@ func (c Claude) With(model, effort string) Provider {
 	return c
 }
 
-func (c Claude) GenerateTasks(ctx context.Context, transcript string) (string, error) {
-	args := []string{"-p", TasksPrompt}
+func (c Claude) Generate(ctx context.Context, prompt, transcript string) (string, error) {
+	args := []string{"-p", prompt}
 	if c.Model != "" {
 		args = append(args, "--model", c.Model)
 	}
@@ -150,13 +151,13 @@ func (c Codex) With(model, effort string) Provider {
 	return c
 }
 
-func (c Codex) GenerateTasks(ctx context.Context, transcript string) (string, error) {
+func (c Codex) Generate(ctx context.Context, prompt, transcript string) (string, error) {
 	dir, err := os.MkdirTemp("", "meet2do-codex-")
 	if err != nil {
 		return "", fmt.Errorf("crear carpeta temporal: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }() // limpieza best-effort
-	out := filepath.Join(dir, "tareas.md")
+	out := filepath.Join(dir, "respuesta.md")
 
 	args := []string{"exec",
 		"--skip-git-repo-check", "--ephemeral",
@@ -170,7 +171,7 @@ func (c Codex) GenerateTasks(ctx context.Context, transcript string) (string, er
 		args = append(args, "-c", fmt.Sprintf("model_reasoning_effort=%q", c.Effort))
 	}
 	cmd := exec.CommandContext(ctx, c.Binary(), append(args, "-")...)
-	cmd.Stdin = strings.NewReader(TasksPrompt + transcript)
+	cmd.Stdin = strings.NewReader(prompt + transcript)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err = cmd.Run(); err != nil {

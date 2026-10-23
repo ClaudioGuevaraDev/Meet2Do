@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -193,8 +194,8 @@ func failureText(summary string, reason error) string {
 // Canceled indica que el usuario canceló la operación.
 func Canceled() { fmt.Println(Subtle("Operación cancelada.")) }
 
-// Done imprime el cierre con los archivos generados. Si dir no es la carpeta actual,
-// la muestra para que se sepa dónde quedaron.
+// Done imprime el cierre con los archivos generados y la carpeta donde quedaron (relativa
+// a la actual si está dentro de ella).
 func Done(dir string, files []string) { fmt.Print(doneText(dir, files)) }
 
 func doneText(dir string, files []string) string {
@@ -202,8 +203,14 @@ func doneText(dir string, files []string) string {
 	for _, f := range files {
 		out += "  " + filepath.Base(f) + "\n"
 	}
-	if cwd, err := os.Getwd(); err != nil || filepath.Clean(cwd) != filepath.Clean(dir) {
-		out += "  " + Subtle("en "+dir) + "\n"
+	shown := dir
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, err := filepath.Rel(cwd, dir); err == nil && !strings.HasPrefix(rel, "..") {
+			shown = rel
+		}
+	}
+	if shown != "." {
+		out += "  " + Subtle("en "+shown+string(filepath.Separator)) + "\n"
 	}
 	return out
 }

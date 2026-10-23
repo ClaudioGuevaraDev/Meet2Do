@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -149,22 +150,39 @@ func Confirm(title, desc string, def bool) (bool, error) {
 
 // ChooseOutputs pregunta qué archivos generar.
 func ChooseOutputs() ([]output.Kind, error) {
-	kinds := []output.Kind{output.Tasks}
-	err := run(huh.NewMultiSelect[output.Kind]().
+	kinds := slices.Clone(defaultOutputs)
+	err := run(outputSelect(&kinds))
+	return kinds, err
+}
+
+// defaultOutputs son los archivos marcados de entrada: los que genera la IA.
+var defaultOutputs = []output.Kind{output.Tasks, output.Summary}
+
+// outputSelect arma la pregunta de archivos, en el orden en que se muestran.
+func outputSelect(kinds *[]output.Kind) *huh.MultiSelect[output.Kind] {
+	opts := make([]huh.Option[output.Kind], 0, 4)
+	for _, o := range []struct {
+		kind output.Kind
+		desc string
+	}{
+		{output.Tasks, "Tareas generadas por IA"},
+		{output.Summary, "Resumen de la reunión por IA"},
+		{output.Transcript, "Texto de la reunión"},
+		{output.Audio, "Audio grabado"},
+	} {
+		opts = append(opts, huh.NewOption(outputLabel(o.kind, o.desc), o.kind).
+			Selected(slices.Contains(defaultOutputs, o.kind)))
+	}
+	return huh.NewMultiSelect[output.Kind]().
 		Title("¿Qué archivos quieres generar?").
-		Options(
-			huh.NewOption(outputLabel(output.Tasks, "Tareas generadas por IA"), output.Tasks).Selected(true),
-			huh.NewOption(outputLabel(output.Transcript, "Texto de la reunión"), output.Transcript),
-			huh.NewOption(outputLabel(output.Audio, "Audio grabado"), output.Audio),
-		).
+		Options(opts...).
 		Validate(func(k []output.Kind) error {
 			if len(k) == 0 {
 				return errors.New("elige al menos un archivo")
 			}
 			return nil
 		}).
-		Value(&kinds))
-	return kinds, err
+		Value(kinds)
 }
 
 // outputLabel alinea el nombre del archivo en una columna y atenúa su descripción, de modo
@@ -177,8 +195,8 @@ func outputLabel(k output.Kind, desc string) string {
 func ChooseDir() (string, error) {
 	dir := "."
 	err := run(huh.NewInput().
-		Title("¿Dónde quieres guardarlos?").
-		Description("Deja vacío para usar la carpeta actual").
+		Title("¿Dónde quieres guardar la reunión?").
+		Description("Se creará una carpeta reunion-<fecha> · vacío = carpeta actual").
 		Prompt("› ").
 		Placeholder(".").
 		Value(&dir).
