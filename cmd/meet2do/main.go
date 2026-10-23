@@ -23,7 +23,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.2.2"
+const version = "0.2.3"
 
 // errNoFFmpeg indica que ffmpeg no está en el PATH.
 var errNoFFmpeg = errors.New("ffmpeg no está instalado (sudo apt install ffmpeg)")
