@@ -19,13 +19,14 @@ import (
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ai"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/recorder"
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/selfupdate"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/transcriber"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ui"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/uninstall"
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.10.0"
+const version = "0.11.0"
 
 // Main es el punto de entrada de meet2do y m2do.
 func Main() {
@@ -57,7 +58,7 @@ func Main() {
 	var err error
 	if uninstallApp {
 		err = runUninstall()
-	} else {
+	} else if err = checkUpdate(ctx); err == nil {
 		err = run(ctx, *model, *lang, *setupOnly)
 	}
 	stop()
@@ -74,6 +75,55 @@ func Main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// updateCheckTimeout limita la consulta a GitHub: sin red, Meet2Do arranca igual.
+const updateCheckTimeout = 1500 * time.Millisecond
+
+// checkUpdate busca una versión nueva y, si la hay, la instala y reinicia el programa con
+// ella (mismos argumentos). Cualquier problema se informa y se sigue con la versión actual;
+// solo devuelve error si el usuario cancela.
+func checkUpdate(ctx context.Context) error {
+	if !selfupdate.Enabled() {
+		return nil
+	}
+	exe, _ := uninstall.InstalledBinary() // Enabled ya comprobó que existe
+	checkCtx, cancel := context.WithTimeout(ctx, updateCheckTimeout)
+	latest, err := selfupdate.Latest(checkCtx)
+	cancel()
+	if err != nil || !selfupdate.Newer(version, latest) {
+		return nil // sin red o sin versión nueva: nada que mostrar
+	}
+
+	ui.Info(fmt.Sprintf("Hay una versión nueva de Meet2Do: v%s (tienes v%s)", latest, version))
+	err = ui.Update(ctx, ui.Download{
+		Name:   "Meet2Do v" + latest,
+		Detail: "versión nueva",
+		Run: func(ctx context.Context, progress func(done, total int64), _ func(string)) error {
+			return selfupdate.Apply(ctx, exe, latest, progress)
+		},
+	})
+	if errors.Is(err, ui.ErrAborted) || errors.Is(err, context.Canceled) {
+		return err
+	}
+	if err != nil {
+		hint := ""
+		if errors.Is(err, fs.ErrPermission) {
+			hint = " (vuelve a ejecutar el instalador para actualizar)"
+		}
+		ui.Warn(fmt.Sprintf("No se pudo actualizar a v%s: %v%s. Sigues usando v%s", latest, err, hint, version))
+		return nil
+	}
+	ui.Success("Meet2Do actualizado a v" + latest)
+	fmt.Println()
+
+	// Reemplaza este proceso por la versión nueva; la marca evita volver a revisar.
+	env := append(os.Environ(), selfupdate.UpdatedEnv+"=1")
+	if err := syscall.Exec(exe, os.Args, env); err != nil {
+		// Se sigue con la versión que ya está en memoria; la próxima vez arranca la nueva.
+		ui.Warn(fmt.Sprintf("Se actualizó, pero no se pudo reiniciar (%v): la versión nueva se usará la próxima vez", err))
+	}
+	return nil
 }
 
 // usage muestra la ayuda (-h): el subcomando y los flags.

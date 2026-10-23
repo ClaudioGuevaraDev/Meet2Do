@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestFormatBytes(t *testing.T) {
@@ -175,6 +176,31 @@ func TestBarWidth(t *testing.T) {
 			t.Parallel()
 			if got := barWidth(tt.term); got != tt.want {
 				t.Errorf("barWidth(%d) = %d; want %d", tt.term, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestInstallTitle(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, title, note string
+		want, notWant     string
+	}{
+		{"first install", "Instalando componentes de Meet2Do", "solo la primera vez", "Instalando componentes de Meet2Do · solo la primera vez", ""},
+		{"update", "Actualizando Meet2Do", "", "Actualizando Meet2Do", "solo la primera vez"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			m := newInstallModel(testDownloads())
+			m.title, m.note = tt.title, tt.note
+			view := ansi.Strip(m.View())
+			if !strings.Contains(view, tt.want) {
+				t.Errorf("view should contain %q:\n%s", tt.want, view)
+			}
+			if tt.notWant != "" && strings.Contains(view, tt.notWant) {
+				t.Errorf("view should not contain %q:\n%s", tt.notWant, view)
 			}
 		})
 	}

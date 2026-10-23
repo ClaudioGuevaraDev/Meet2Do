@@ -32,13 +32,24 @@ func TotalSize(downloads []Download) int64 {
 // Install muestra la pantalla de instalación y descarga los componentes en orden.
 // Con Ctrl+C cancela la descarga en curso y devuelve ErrAborted.
 func Install(ctx context.Context, downloads []Download) error {
+	return download(ctx, "Instalando componentes de Meet2Do", "solo la primera vez", downloads)
+}
+
+// Update muestra la misma pantalla para descargar una versión nueva de Meet2Do.
+func Update(ctx context.Context, d Download) error {
+	return download(ctx, "Actualizando Meet2Do", "", []Download{d})
+}
+
+func download(ctx context.Context, title, note string, downloads []Download) error {
 	if len(downloads) == 0 {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	p := tea.NewProgram(newInstallModel(downloads))
+	m := newInstallModel(downloads)
+	m.title, m.note = title, note
+	p := tea.NewProgram(m)
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
@@ -102,6 +113,8 @@ type installItem struct {
 }
 
 type installModel struct {
+	title string // encabezado de la pantalla
+	note  string // aclaración atenuada junto al encabezado ("" = ninguna)
 	items []installItem
 	bar   progress.Model
 	err   error
@@ -130,7 +143,7 @@ func newInstallModel(downloads []Download) installModel {
 	}
 	bar := progress.New(progress.WithSolidFill(hex(brand)), progress.WithWidth(maxBarWidth), progress.WithoutPercentage())
 	bar.EmptyColor = hex(faint)
-	return installModel{items: items, bar: bar}
+	return installModel{title: "Instalando componentes de Meet2Do", note: "solo la primera vez", items: items, bar: bar}
 }
 
 const (
@@ -186,7 +199,11 @@ func (m installModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m installModel) View() string {
 	var b strings.Builder
-	b.WriteString("\n" + brandStyle.Render("Instalando componentes de Meet2Do") + Subtle(" · solo la primera vez") + "\n\n")
+	b.WriteString("\n" + brandStyle.Render(m.title))
+	if m.note != "" {
+		b.WriteString(Subtle(" · " + m.note))
+	}
+	b.WriteString("\n\n")
 	for _, it := range m.items {
 		b.WriteString(m.itemView(it))
 	}

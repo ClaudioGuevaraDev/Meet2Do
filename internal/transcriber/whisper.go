@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/download"
 )
 
 const (
@@ -100,7 +102,7 @@ func (w *Whisper) DownloadModel(ctx context.Context, progress ProgressFunc) erro
 		return err
 	}
 	url := fmt.Sprintf("%s/ggml-%s.bin", cmp.Or(w.BaseURL, DefaultBaseURL), w.ModelName())
-	if _, err = download(ctx, url, dst, progress); err != nil {
+	if _, err = download.File(ctx, url, dst, progress); err != nil {
 		return fmt.Errorf("descargar modelo %q: %w", w.ModelName(), err)
 	}
 	return nil

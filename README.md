@@ -1,6 +1,6 @@
 # Meet2Do
 
-Versión: **0.10.0**
+Versión: **0.11.0**
 
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
 whisper.cpp y genera con Claude o Codex una lista de tareas (`tareas.md`) con features, bugs y
@@ -23,12 +23,17 @@ curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/inst
 El instalador descarga el binario de la última versión desde
 [GitHub Releases](https://github.com/ClaudioGuevaraDev/Meet2Do/releases), verifica su SHA-256 y
 lo instala en `~/.local/bin` (sin sudo) junto con el atajo `m2do`. Si esa carpeta no está en tu
-`PATH`, te muestra la línea para agregarla. Para **actualizar**, vuelve a ejecutarlo.
+`PATH`, te muestra la línea para agregarla.
+
+**Actualizaciones automáticas:** cada vez que inicias Meet2Do revisa si hay una versión nueva
+publicada; si la hay, la descarga (verificando su SHA-256), se reemplaza y se reinicia solo.
+Sin conexión arranca igual. Para desactivarlo: `MEET2DO_NO_UPDATE=1`. Volver a ejecutar el
+instalador también actualiza.
 
 Opciones (variables de entorno, antes de `sh`):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | MEET2DO_VERSION=v0.10.0 sh
+curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | MEET2DO_VERSION=v0.11.0 sh
 curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | MEET2DO_INSTALL_DIR=/opt/bin sh
 ```
 

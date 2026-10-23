@@ -38,7 +38,7 @@ var executable = os.Executable
 // Find devuelve lo que está instalado, en el orden en que se muestra.
 func Find() ([]Component, error) {
 	var cs []Component
-	if exe, ok := installedBinary(); ok {
+	if exe, ok := InstalledBinary(); ok {
 		if c, ok := appComponent(exe); ok {
 			cs = append(cs, c)
 		}
@@ -90,8 +90,9 @@ func appComponent(exe string) (Component, bool) {
 	return c, len(c.Paths) > 0
 }
 
-// installedBinary devuelve el ejecutable de Meet2Do, salvo que sea uno temporal de `go run`.
-func installedBinary() (string, bool) {
+// InstalledBinary devuelve el ejecutable real de Meet2Do (resolviendo symlinks), salvo que
+// sea uno temporal de `go run`.
+func InstalledBinary() (string, bool) {
 	exe, err := executable()
 	if err != nil {
 		return "", false

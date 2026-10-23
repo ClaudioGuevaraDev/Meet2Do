@@ -1,4 +1,6 @@
-package transcriber
+// Package download baja archivos por HTTP de forma atómica, informando el progreso y
+// calculando el SHA-256 (lo usan el instalador de whisper.cpp y la auto-actualización).
+package download
 
 import (
 	"context"
@@ -15,9 +17,9 @@ import (
 // ProgressFunc recibe los bytes descargados y el total (0 o -1 si se desconoce).
 type ProgressFunc func(done, total int64)
 
-// download baja url a dst de forma atómica (vía dst.part) y devuelve el SHA-256 del contenido.
+// File baja url a dst de forma atómica (vía dst.part) y devuelve el SHA-256 del contenido.
 // Si algo falla no queda ningún archivo parcial.
-func download(ctx context.Context, url, dst string, progress ProgressFunc) (string, error) {
+func File(ctx context.Context, url, dst string, progress ProgressFunc) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return "", fmt.Errorf("crear carpeta %s: %w", filepath.Dir(dst), err)
 	}

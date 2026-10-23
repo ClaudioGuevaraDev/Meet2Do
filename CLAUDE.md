@@ -15,7 +15,7 @@ go run ./cmd/meet2do uninstall    # subcommand (positional arg after the flags)
 go run ./cmd/m2do                  # m2do is the short alias: identical to meet2do
 make test | make test-race
 make test-integration             # records ~3 s with the real PulseAudio/PipeWire server (not in CI)
-make cover-check                  # fails if internal/{ai,output,recorder,transcriber,uninstall} < 80% (recorder/pulse.go excluded)
+make cover-check                  # fails if internal/{ai,output,recorder,transcriber,uninstall,download,selfupdate} < 80% (recorder/pulse.go excluded)
 make lint                         # go vet + golangci-lint (v2 config in .golangci.yml)
 go test ./internal/transcriber -run 'TestTranscribe/binary_fails' -v   # single (sub)test
 go test ./internal/output ./internal/recorder -update               # regenerate golden files
@@ -30,7 +30,9 @@ The app must stay **all-in-one**: users only need `claude` or `codex` on PATH. N
 
 `install.sh` (repo root, POSIX sh, Spanish messages) is the primary install path: `curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | sh`. It downloads `meet2do-linux-<amd64|arm64>.tar.gz` + `checksums.txt` from GitHub Releases (`latest` or `MEET2DO_VERSION`), verifies the SHA-256, installs `meet2do` into `MEET2DO_INSTALL_DIR` (default `~/.local/bin`) and creates `m2do` as a symlink. `MEET2DO_DOWNLOAD_URL` overrides the source — to test locally: `make dist`, `python3 -m http.server` in `dist/`, then `MEET2DO_DOWNLOAD_URL=http://127.0.0.1:<port> MEET2DO_INSTALL_DIR=/tmp/x sh install.sh`.
 
-`make dist` builds static (`CGO_ENABLED=0`) binaries; asset names carry no version so `releases/latest/download/<asset>` always works. `.github/workflows/release.yml` runs on every push to `main`: if the `version` constant has no `v<version>` tag yet, it runs the tests, `make dist` and `gh release create` (which creates the tag). So bumping the version via `/conventional-commit` and pushing publishes a release; never create those tags by hand. `go install …/cmd/...@latest` remains the alternative.
+`make dist` builds static (`CGO_ENABLED=0`) binaries; asset names carry no version so `releases/latest/download/<asset>` always works. `.github/workflows/release.yml` runs on every push to `main`: if the `version` constant has no `v<version>` tag yet, it runs the tests, `make dist` and `gh release create` (which creates the tag). So bumping the version via `/conventional-commit` and pushing publishes a release; never create those tags by hand.
+
+Self-update (`internal/selfupdate`, called from `cli.checkUpdate` before `run`, not for `-version`/`uninstall`): `Latest` does a `HEAD releases/latest` without following the redirect and reads the tag from `Location` (no GitHub API rate limit), with a 1.5 s timeout so offline startup isn't blocked; if `Newer(version, latest)`, `ui.Update` shows the download screen while `Apply` downloads the tarball + `checksums.txt` (via `internal/download`, shared with whisper downloads), verifies the SHA-256 and renames the new binary over the real executable (and over sibling `m2do` if it is a regular file). Then `syscall.Exec` restarts with the same args and `MEET2DO_UPDATED=1` (prevents a loop). Disabled by `MEET2DO_NO_UPDATE`, and for `go run`/`go test` binaries (`uninstall.InstalledBinary`). `MEET2DO_RELEASES_URL` points it at a local server for tests (selfupdate tests use `httptest`). `go install …/cmd/...@latest` remains the alternative.
 
 ## Architecture
 

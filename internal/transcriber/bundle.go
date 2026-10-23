@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/download"
 )
 
 // BundleTag es la release de whisper.cpp que usa Meet2Do. Para actualizarla, cambia el tag
@@ -119,7 +121,7 @@ func (w *Whisper) EnsureBinary(ctx context.Context, progress ProgressFunc, phase
 	parent := filepath.Dir(dir)
 	archive := filepath.Join(parent, b.asset)
 	url := fmt.Sprintf("%s/%s/%s", cmp.Or(w.BundleBaseURL, DefaultBundleBaseURL), BundleTag, b.asset)
-	sum, err := download(ctx, url, archive, progress)
+	sum, err := download.File(ctx, url, archive, progress)
 	if err != nil {
 		return "", fmt.Errorf("descargar whisper.cpp: %w", err)
 	}

@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/ClaudioGuevaraDev/Meet2Do/main/install.sh | sh
 #
 # Variables opcionales:
-#   MEET2DO_VERSION       versión a instalar, p. ej. v0.10.0 (por defecto, la última)
+#   MEET2DO_VERSION       versión a instalar, p. ej. v0.11.0 (por defecto, la última)
 #   MEET2DO_INSTALL_DIR   carpeta de destino (por defecto ~/.local/bin, no requiere sudo)
 #   MEET2DO_DOWNLOAD_URL  origen de los archivos (para pruebas; por defecto GitHub Releases)
 #
