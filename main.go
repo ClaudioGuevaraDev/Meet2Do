@@ -21,7 +21,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.2.0"
+const version = "0.2.1"
 
 func main() {
 	model := flag.String("model", "small", "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
