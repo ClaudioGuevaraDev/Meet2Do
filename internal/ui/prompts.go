@@ -198,7 +198,11 @@ func uninstallSelect(cs []uninstall.Component, idx *[]int) *huh.MultiSelect[int]
 	opts := make([]huh.Option[int], len(cs))
 	*idx = make([]int, len(cs))
 	for i, c := range cs {
-		desc := homePath(c.Path)
+		// La primera ruta completa y, de las demás, solo el nombre: "~/go/bin/meet2do, m2do".
+		desc := homePath(c.Paths[0])
+		for _, p := range c.Paths[1:] {
+			desc += ", " + filepath.Base(p)
+		}
 		if c.Detail != "" {
 			desc += " (" + c.Detail + ")"
 		}

@@ -408,9 +408,9 @@ func TestUninstallSelect(t *testing.T) {
 		t.Skip("sin home")
 	}
 	cs := []uninstall.Component{
-		{Name: uninstall.App, Path: "/usr/local/bin/meet2do", Size: 10 << 20},
-		{Name: uninstall.Whisper, Path: filepath.Join(home, ".cache/meet2do/whisper"), Size: 20 << 20},
-		{Name: uninstall.Models, Path: filepath.Join(home, ".cache/meet2do/models"), Detail: "small", Size: 465 << 20},
+		{Name: uninstall.App, Paths: []string{"/usr/local/bin/meet2do", "/usr/local/bin/m2do"}, Size: 10 << 20},
+		{Name: uninstall.Whisper, Paths: []string{filepath.Join(home, ".cache/meet2do/whisper")}, Size: 20 << 20},
+		{Name: uninstall.Models, Paths: []string{filepath.Join(home, ".cache/meet2do/models")}, Detail: "small", Size: 465 << 20},
 	}
 	var idx []int
 	f := huh.NewForm(huh.NewGroup(uninstallSelect(cs, &idx))).WithTheme(theme()).WithKeyMap(keymap())
@@ -419,7 +419,7 @@ func TestUninstallSelect(t *testing.T) {
 	view := ansi.Strip(f.View())
 	for _, w := range []string{
 		"Tus reuniones guardadas no se borran",
-		"[x] Meet2Do", "/usr/local/bin/meet2do · 10.0 MB",
+		"[x] Meet2Do", "/usr/local/bin/meet2do, m2do · 10.0 MB",
 		"[x] whisper.cpp", "~/.cache/meet2do/whisper · 20.0 MB",
 		"[x] Modelos de voz", "~/.cache/meet2do/models (small) · 465.0 MB",
 	} {

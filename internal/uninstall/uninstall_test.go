@@ -44,25 +44,37 @@ func TestFind(t *testing.T) {
 		name  string
 		files map[string]int
 		exe   string
-		want  string // "Nombre|Detalle|tamaño" separados por ;
+		want  string // "Nombre|archivos|Detalle|tamaño" separados por ;
 	}{
 		{
 			name:  "everything installed",
 			files: all,
 			exe:   "bin/meet2do",
-			want:  "Meet2Do||100;whisper.cpp||50;Modelos de voz|small, tiny|475",
+			want:  "Meet2Do|meet2do||100;whisper.cpp|whisper||50;Modelos de voz|models|small, tiny|475",
+		},
+		{
+			name:  "both commands installed",
+			files: map[string]int{"bin/meet2do": 100, "bin/m2do": 90},
+			exe:   "bin/meet2do",
+			want:  "Meet2Do|meet2do,m2do||190",
+		},
+		{
+			name:  "running as m2do finds meet2do",
+			files: map[string]int{"bin/meet2do": 100, "bin/m2do": 90},
+			exe:   "bin/m2do",
+			want:  "Meet2Do|m2do,meet2do||190",
 		},
 		{
 			name:  "go run binary is not offered",
 			files: all,
 			exe:   "tmp/go-build123/b001/exe/meet2do",
-			want:  "whisper.cpp||50;Modelos de voz|small, tiny|475",
+			want:  "whisper.cpp|whisper||50;Modelos de voz|models|small, tiny|475",
 		},
 		{
 			name:  "only the binary",
 			files: map[string]int{"bin/meet2do": 100},
 			exe:   "bin/meet2do",
-			want:  "Meet2Do||100",
+			want:  "Meet2Do|meet2do||100",
 		},
 		{name: "nothing installed", exe: "bin/missing"},
 	}
@@ -77,10 +89,14 @@ func TestFind(t *testing.T) {
 			}
 			var got []string
 			for _, c := range cs {
-				got = append(got, c.Name+"|"+c.Detail+"|"+strconv.FormatInt(c.Size, 10))
-				if !strings.HasPrefix(c.Path, root) {
-					t.Errorf("%s path %q is outside the test root", c.Name, c.Path)
+				var names []string
+				for _, p := range c.Paths {
+					if !strings.HasPrefix(p, root) {
+						t.Errorf("%s path %q is outside the test root", c.Name, p)
+					}
+					names = append(names, filepath.Base(p))
 				}
+				got = append(got, c.Name+"|"+strings.Join(names, ",")+"|"+c.Detail+"|"+strconv.FormatInt(c.Size, 10))
 			}
 			if s := strings.Join(got, ";"); s != tt.want {
 				t.Errorf("Find = %q; want %q", s, tt.want)
@@ -102,6 +118,7 @@ func TestRemoveAndCleanup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := setup(t, map[string]int{
 				"bin/meet2do": 10,
+				"bin/m2do":    10,
 				"cache/meet2do/whisper/b5454/whisper-cli": 10,
 				"cache/meet2do/models/ggml-small.bin":     10,
 			})
@@ -117,8 +134,10 @@ func TestRemoveAndCleanup(t *testing.T) {
 				if rmErr := uninstall.Remove(c); rmErr != nil {
 					t.Fatalf("remove %s: %v", c.Name, rmErr)
 				}
-				if _, statErr := os.Stat(c.Path); !os.IsNotExist(statErr) {
-					t.Errorf("%s should be gone (stat err %v)", c.Path, statErr)
+				for _, p := range c.Paths {
+					if _, statErr := os.Stat(p); !os.IsNotExist(statErr) {
+						t.Errorf("%s should be gone (stat err %v)", p, statErr)
+					}
 				}
 			}
 			uninstall.Cleanup()
@@ -146,7 +165,7 @@ func TestRemoveError(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root ignora los permisos")
 	}
-	err := uninstall.Remove(uninstall.Component{Name: "x", Path: filepath.Join(locked, "sub")})
+	err := uninstall.Remove(uninstall.Component{Name: "x", Paths: []string{filepath.Join(locked, "sub")}})
 	if err == nil || !strings.Contains(err.Error(), "borrar") {
 		t.Errorf("Remove = %v; want a wrapped error", err)
 	}

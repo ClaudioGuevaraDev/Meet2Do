@@ -1,6 +1,6 @@
 # Meet2Do
 
-Versión: **0.8.0**
+Versión: **0.9.0**
 
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
 whisper.cpp y genera con Claude o Codex una lista de tareas (`tareas.md`) con features, bugs y
@@ -18,7 +18,7 @@ descarga solo la primera vez, con una barra de progreso que indica qué se está
 ## Instalación
 
 ```sh
-go install github.com/ClaudioGuevaraDev/Meet2Do/cmd/meet2do@latest
+go install github.com/ClaudioGuevaraDev/Meet2Do/cmd/...@latest   # instala meet2do y su atajo m2do
 meet2do -setup            # opcional: deja todo descargado ahora (~476 MB con el modelo small)
 ```
 
@@ -32,8 +32,11 @@ de empezar a grabar. Se descargan, en `~/.cache/meet2do/`:
 
 ## Uso
 
+`m2do` es un atajo de `meet2do`: es el mismo programa y acepta lo mismo (`m2do -setup`,
+`m2do uninstall`…).
+
 ```sh
-meet2do                   # modelo whisper "small", idioma autodetectado
+meet2do                   # modelo whisper "small", idioma autodetectado (o simplemente: m2do)
 meet2do -model medium -lang es
 meet2do -setup            # descarga lo que falte y termina
 meet2do uninstall         # desinstala Meet2Do y lo que descargó
@@ -54,8 +57,8 @@ Si cambias de modelo con `-model`, el nuevo se descarga la próxima vez que lo u
 meet2do uninstall
 ```
 
-Muestra lo que Meet2Do instaló, todo marcado, para que elijas qué borrar: el ejecutable
-`meet2do`, whisper.cpp y los modelos de voz (en `~/.cache/meet2do/`). Pide confirmación antes de
+Muestra lo que Meet2Do instaló, todo marcado, para que elijas qué borrar: los ejecutables
+`meet2do` y `m2do`, whisper.cpp y los modelos de voz (en `~/.cache/meet2do/`). Pide confirmación antes de
 borrar. Tus reuniones guardadas no se tocan. Meet2Do no instala ffmpeg ni nada fuera de esas
 rutas.
 

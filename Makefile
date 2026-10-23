@@ -8,8 +8,10 @@ MINCOVER := 80
 
 .PHONY: build run setup test test-race test-integration cover cover-check lint fmt tidy clean
 
+# Compila meet2do y su atajo m2do (el mismo programa).
 build:
 	go build -o $(BIN) $(PKG)
+	go build -o bin/m2do ./cmd/m2do
 
 run:
 	go run $(PKG)

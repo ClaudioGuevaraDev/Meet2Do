@@ -9,9 +9,10 @@ Meet2Do is a Linux-only Go CLI that records a meeting (mic + system audio), tran
 ## Commands
 
 ```sh
-make build                        # -> bin/meet2do (entry point: ./cmd/meet2do)
+make build                        # -> bin/meet2do and bin/m2do (same program, see internal/cli)
 go run ./cmd/meet2do [-model small] [-lang auto] [-setup] [-version]
 go run ./cmd/meet2do uninstall    # subcommand (positional arg after the flags)
+go run ./cmd/m2do                  # m2do is the short alias: identical to meet2do
 make test | make test-race
 make test-integration             # records ~3 s with the real PulseAudio/PipeWire server (not in CI)
 make cover-check                  # fails if internal/{ai,output,recorder,transcriber,uninstall} < 80% (recorder/pulse.go excluded)
@@ -27,7 +28,7 @@ The app must stay **all-in-one**: users only need `claude` or `codex` on PATH. N
 
 ## Architecture
 
-`cmd/meet2do/main.go` is a linear orchestrator: a `session` struct carries state through small step methods (check `claude`/`codex` → `setup` (install screen for whatever is missing) → choose AI → record → choose outputs and folder → (transcribe) → (generate tasks) → write files). `-setup` runs only the install step; the `uninstall` subcommand runs `runUninstall` instead (no `claude`/`codex` needed). The root context comes from `signal.NotifyContext`. Each step lives in its own package under `internal/`:
+`cmd/meet2do` and `cmd/m2do` are one-line `main`s that call `cli.Main()`; `go install …/cmd/...@latest` installs both. `internal/cli/cli.go` is a linear orchestrator: a `session` struct carries state through small step methods (check `claude`/`codex` → `setup` (install screen for whatever is missing) → choose AI → record → choose outputs and folder → (transcribe) → (generate tasks) → write files). `-setup` runs only the install step; the `uninstall` subcommand runs `runUninstall` instead (no `claude`/`codex` needed). The root context comes from `signal.NotifyContext`. Each step lives in its own package under `internal/`:
 
 - `recorder` — pure Go, no ffmpeg. `pulse.go` opens two `jfreymuth/pulse` record streams (default source = mic, monitor of default sink = system audio) at 16 kHz mono int16 (the server resamples). Each `Source` appends to its buffer; a goroutine mixes every 100 ms what both have (`Mix`, saturating) and streams it to disk via `wav.go` (header sizes patched on close). If one source lags more than 2 s (e.g. the monitor sends nothing while nothing plays) it is padded with silence, so a meeting is never held in RAM. `Pause` keeps the streams open but drops incoming samples (after flushing what was buffered); `Resume` clears both buffers so the sources stay aligned; `flush` is serialized by `flushMu`. `NewWithSources` injects fake sources for tests.
 - `transcriber` — `bundle.go` downloads the official whisper.cpp Linux build (`BundleTag`, per-arch asset + pinned SHA-256 in `bundles`), verifies it, extracts only `whisper-cli` + `lib*.so*` (rejecting unsafe tar paths/symlinks) into `$XDG_CACHE_HOME/meet2do/whisper/<tag>/` via an atomic rename; `whisper-cli` has `RUNPATH=$ORIGIN`, so no system install is needed. To upgrade whisper.cpp, change `BundleTag` and the hashes (GitHub shows each asset's `sha256` digest). `download.go` is the shared `.part`+rename downloader also used for `ggml-<model>.bin` from Hugging Face. `Transcribe` runs `whisper-cli -otxt -of <base>` and reads `<base>.txt`.
@@ -40,11 +41,11 @@ Transcription only runs if an AI file (`tareas.md`, `resumen.md`) or `transcripc
 
 Errors are wrapped with `%w` and context; packages expose sentinel errors (`recorder.ErrNotStarted`/`ErrEmptyRecording`/`ErrNoAudioServer`, `transcriber.ErrChecksum`/`ErrUnsafeArchive`/`ErrUnsupportedPlatform`, `ai.ErrNoProvider`) for `errors.Is`. `transcriber.Whisper` has a useful zero value (empty `Model`/`Lang`/`BaseURL`/`BundleBaseURL` → defaults); the URLs let tests point downloads at `httptest`.
 
-Tests follow the golang-testing skill: external `_test` packages (public API only), table-driven with `t.Run`, and external binaries replaced by shell scripts via `internal/testutil` (`FakeBin` + `IsolatedPath`, which uses `t.Setenv`, so those tests can't be `t.Parallel`). `transcriber/export_test.go` provides `SetTestBundle` to accept a test tarball's checksum (global state, not parallel). The install screen's `Update`/`View` are tested in `ui/install_test.go` without a TTY; the rest of `ui` and `cmd/meet2do` are untested.
+Tests follow the golang-testing skill: external `_test` packages (public API only), table-driven with `t.Run`, and external binaries replaced by shell scripts via `internal/testutil` (`FakeBin` + `IsolatedPath`, which uses `t.Setenv`, so those tests can't be `t.Parallel`). `transcriber/export_test.go` provides `SetTestBundle` to accept a test tarball's checksum (global state, not parallel). The install screen's `Update`/`View` are tested in `ui/install_test.go` without a TTY; the rest of `ui` and `internal/cli` are untested.
 
 ## Versioning rule (`/conventional-commit`)
 
-Every time the user asks to run the `/conventional-commit` skill, bump the app version (`A.B.C`) **before** committing, and update it in every place it appears — currently the `version` constant in `cmd/meet2do/main.go` and the `Versión:` line in `README.md` — so all occurrences stay in sync and are included in the same commit.
+Every time the user asks to run the `/conventional-commit` skill, bump the app version (`A.B.C`) **before** committing, and update it in every place it appears — currently the `version` constant in `internal/cli/cli.go` and the `Versión:` line in `README.md` — so all occurrences stay in sync and are included in the same commit.
 
 - `A` (major) must **never** be increased, not even for breaking changes.
 - `feat` (including breaking changes) → increase `B`, reset `C` to 0.

@@ -16,11 +16,14 @@ import (
 
 // Component es algo instalado que se puede desinstalar.
 type Component struct {
-	Name   string // "Meet2Do", "whisper.cpp", "Modelos de voz"
-	Detail string // información extra, p. ej. los modelos descargados ("small, tiny")
-	Path   string // archivo o carpeta que se borra
-	Size   int64  // bytes que ocupa
+	Name   string   // "Meet2Do", "whisper.cpp", "Modelos de voz"
+	Detail string   // información extra, p. ej. los modelos descargados ("small, tiny")
+	Paths  []string // archivos o carpetas que se borran
+	Size   int64    // bytes que ocupa
 }
+
+// Commands son los nombres del ejecutable: meet2do y su atajo m2do (el mismo programa).
+var Commands = []string{"meet2do", "m2do"}
 
 // Nombres de los componentes.
 const (
@@ -36,8 +39,8 @@ var executable = os.Executable
 func Find() ([]Component, error) {
 	var cs []Component
 	if exe, ok := installedBinary(); ok {
-		if size, err := dirSize(exe); err == nil {
-			cs = append(cs, Component{Name: App, Path: exe, Size: size})
+		if c, ok := appComponent(exe); ok {
+			cs = append(cs, c)
 		}
 	}
 
@@ -50,20 +53,41 @@ func Find() ([]Component, error) {
 		return nil, err
 	}
 	for _, c := range []Component{
-		{Name: Whisper, Path: whisper},
-		{Name: Models, Path: models, Detail: strings.Join(modelNames(models), ", ")},
+		{Name: Whisper, Paths: []string{whisper}},
+		{Name: Models, Paths: []string{models}, Detail: strings.Join(modelNames(models), ", ")},
 	} {
-		size, err := dirSize(c.Path)
+		size, err := dirSize(c.Paths[0])
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return nil, fmt.Errorf("leer %s: %w", c.Path, err)
+			return nil, fmt.Errorf("leer %s: %w", c.Paths[0], err)
 		}
 		c.Size = size
 		cs = append(cs, c)
 	}
 	return cs, nil
+}
+
+// appComponent arma el componente Meet2Do: el ejecutable en uso y, si están en la misma
+// carpeta, los demás nombres del programa (meet2do ↔ m2do).
+func appComponent(exe string) (Component, bool) {
+	c := Component{Name: App}
+	paths := []string{exe}
+	for _, name := range Commands {
+		if p := filepath.Join(filepath.Dir(exe), name); p != exe {
+			paths = append(paths, p)
+		}
+	}
+	for _, p := range paths {
+		size, err := dirSize(p)
+		if err != nil {
+			continue // el atajo no está instalado (o no se puede leer): no se ofrece
+		}
+		c.Paths = append(c.Paths, p)
+		c.Size += size
+	}
+	return c, len(c.Paths) > 0
 }
 
 // installedBinary devuelve el ejecutable de Meet2Do, salvo que sea uno temporal de `go run`.
@@ -117,12 +141,16 @@ func dirSize(path string) (int64, error) {
 	return total, err
 }
 
-// Remove borra el componente. En Linux se puede borrar el ejecutable que está corriendo.
+// Remove borra todas las rutas del componente. En Linux se puede borrar el ejecutable que
+// está corriendo.
 func Remove(c Component) error {
-	if err := os.RemoveAll(c.Path); err != nil {
-		return fmt.Errorf("borrar %s: %w", c.Path, err)
+	var errs []error
+	for _, p := range c.Paths {
+		if err := os.RemoveAll(p); err != nil {
+			errs = append(errs, fmt.Errorf("borrar %s: %w", p, err))
+		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 // Cleanup borra la carpeta de caché de Meet2Do si quedó vacía.
