@@ -112,19 +112,19 @@ func (m recordingModel) View() string {
 	h, mi, s := int(elapsed.Hours()), int(elapsed.Minutes())%60, int(elapsed.Seconds())%60
 	clock := brandStyle.Render(fmt.Sprintf("%02d:%02d:%02d", h, mi, s))
 
-	status := recDotStyle.Render("●") + " " + recTitleStyle.Render("Grabando")
+	status := recDotStyle.Render(glyphRec) + " " + recTitleStyle.Render("Grabando")
 	if m.blink {
 		status = "  " + recTitleStyle.Render("Grabando")
 	}
-	pauseLabel := "‖ Pausar"
+	pauseLabel := glyphPause + " Pausar"
 	if m.paused {
-		status = pausedStyle.Render("‖ En pausa")
-		pauseLabel = "▶ Continuar"
+		status = pausedStyle.Render(glyphPause + " En pausa")
+		pauseLabel = glyphResume + " Continuar"
 	}
 
 	th := theme()
 	buttons := make([]string, numButtons)
-	for i, label := range []string{pauseLabel, "■ Terminar"} {
+	for i, label := range []string{pauseLabel, glyphStop + " Terminar"} {
 		style := th.Focused.BlurredButton
 		if i == m.focus {
 			style = th.Focused.FocusedButton

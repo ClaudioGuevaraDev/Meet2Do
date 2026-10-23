@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"golang.org/x/text/width"
 
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ai"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
@@ -154,8 +155,8 @@ func TestThemeGlyphs(t *testing.T) {
 	}{
 		{"select selector", th.Focused.SelectSelector.String(), "❯ "},
 		{"multiselect selector", th.Focused.MultiSelectSelector.String(), "❯ "},
-		{"selected prefix", th.Focused.SelectedPrefix.String(), "◉ "},
-		{"unselected prefix", th.Focused.UnselectedPrefix.String(), "◯ "},
+		{"selected prefix", th.Focused.SelectedPrefix.String(), "[x] "},
+		{"unselected prefix", th.Focused.UnselectedPrefix.String(), "[ ] "},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -343,5 +344,28 @@ func TestDefaultOptionShowsResolvedValue(t *testing.T) {
 				t.Errorf("default option = %q; want %q … %q", got, defaultLabel, tt.want)
 			}
 		})
+	}
+}
+
+// Los íconos de ancho "ambiguo" (◯, ●, ↓…) se dibujan más grandes en muchas fuentes y pisan
+// el texto: todos los de la interfaz deben ser de ancho estrecho.
+func TestGlyphsAreNarrow(t *testing.T) {
+	t.Parallel()
+	glyphs := []string{
+		glyphSuccess, glyphError, glyphWarn, glyphInfo, glyphCursor, glyphChecked, glyphUnchecked,
+		glyphPending, glyphDownload, glyphRec, glyphPause, glyphResume, glyphStop, logo,
+	}
+	for _, g := range glyphs {
+		for _, r := range g {
+			switch width.LookupRune(r).Kind() {
+			case width.Neutral, width.EastAsianNarrow, width.EastAsianHalfwidth:
+			default:
+				t.Errorf("glyph %q: %U is not narrow (%v)", g, r, width.LookupRune(r).Kind())
+			}
+		}
+	}
+	// Las casillas deben medir lo mismo para que los nombres queden alineados.
+	if a, b := lipgloss.Width(glyphChecked), lipgloss.Width(glyphUnchecked); a != b {
+		t.Errorf("checkbox widths differ: %d vs %d", a, b)
 	}
 }

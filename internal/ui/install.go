@@ -200,20 +200,20 @@ func (m installModel) itemView(it installItem) string {
 	title := fmt.Sprintf("%s %s", it.Name, Subtle("· "+it.Detail))
 	switch it.state {
 	case stateWaiting:
-		return fmt.Sprintf("  %s %s  %s\n", Subtle("◯"), title, Subtle(FormatBytes(it.total)))
+		return fmt.Sprintf("  %s %s  %s\n", Subtle(glyphPending), title, Subtle(FormatBytes(it.total)))
 	case stateDone:
 		return fmt.Sprintf("  %s %s  %s\n", successStyle.Render(glyphSuccess), title, Subtle(FormatBytes(it.total)))
 	case stateFailed:
 		return fmt.Sprintf("  %s %s\n", errorStyle.Render(glyphError), title)
 	case stateWorking:
-		return fmt.Sprintf("  %s %s\n    %s %s\n", brandStyle.Render("↓"), title, m.bar.ViewAs(1), Subtle(it.label+"…"))
+		return fmt.Sprintf("  %s %s\n    %s %s\n", brandStyle.Render(glyphDownload), title, m.bar.ViewAs(1), Subtle(it.label+"…"))
 	}
 	pct := 0.0
 	if it.total > 0 {
 		pct = min(1, float64(it.done)/float64(it.total))
 	}
 	return fmt.Sprintf("  %s %s\n    %s %3.0f%%  %s\n",
-		brandStyle.Render("↓"), title, m.bar.ViewAs(pct), pct*100,
+		brandStyle.Render(glyphDownload), title, m.bar.ViewAs(pct), pct*100,
 		Subtle(fmt.Sprintf("%s / %s · %s", formatDone(it.done), FormatBytes(it.total), FormatSpeed(it.speed))))
 }
 

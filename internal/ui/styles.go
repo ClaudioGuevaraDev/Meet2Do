@@ -34,12 +34,22 @@ var (
 // se vea igual en cualquier fuente.
 const logo = "◉"
 
-// Glifos de estado, comunes a todas las pantallas.
+// Íconos de la interfaz. Todos son de ancho estrecho en Unicode (no "ambiguo"): los de
+// ancho ambiguo, como ◯ o ●, se dibujan más grandes en muchas fuentes y pisan el texto.
 const (
-	glyphSuccess = "✓"
-	glyphError   = "✗"
-	glyphWarn    = "!"
-	glyphInfo    = "›"
+	glyphSuccess   = "✓"
+	glyphError     = "✗"
+	glyphWarn      = "!"
+	glyphInfo      = "›"
+	glyphCursor    = "❯"
+	glyphChecked   = "[x]" // casillas como las listas de tareas de Markdown
+	glyphUnchecked = "[ ]"
+	glyphPending   = "-"
+	glyphDownload  = "⇣"
+	glyphRec       = "◉"
+	glyphPause     = "❙❙"
+	glyphResume    = "▸"
+	glyphStop      = "▪"
 )
 
 // theme es el tema de las preguntas: sin bordes ni fondos, pregunta en el color de marca,
@@ -59,16 +69,16 @@ func theme() *huh.Theme {
 	f.Directory = lipgloss.NewStyle().Foreground(brand)
 	f.File = lipgloss.NewStyle()
 
-	// ❯ marca la opción enfocada; ◉/◯ si está marcada o no.
-	f.SelectSelector = lipgloss.NewStyle().Foreground(accent).Bold(true).SetString("❯ ")
+	// ❯ marca la opción enfocada; [x]/[ ] si está marcada o no.
+	f.SelectSelector = lipgloss.NewStyle().Foreground(accent).Bold(true).SetString(glyphCursor + " ")
 	f.MultiSelectSelector = f.SelectSelector
 	f.Option = lipgloss.NewStyle()
 	f.NextIndicator = lipgloss.NewStyle().Foreground(accent).MarginLeft(1).SetString("→")
 	f.PrevIndicator = lipgloss.NewStyle().Foreground(accent).MarginRight(1).SetString("←")
 	f.SelectedOption = lipgloss.NewStyle().Foreground(accent)
-	f.SelectedPrefix = lipgloss.NewStyle().Foreground(accent).SetString("◉ ")
+	f.SelectedPrefix = lipgloss.NewStyle().Foreground(accent).Bold(true).SetString(glyphChecked + " ")
 	f.UnselectedOption = lipgloss.NewStyle()
-	f.UnselectedPrefix = lipgloss.NewStyle().Foreground(muted).SetString("◯ ")
+	f.UnselectedPrefix = lipgloss.NewStyle().Foreground(muted).SetString(glyphUnchecked + " ")
 
 	f.TextInput.Prompt = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	f.TextInput.Cursor = lipgloss.NewStyle().Foreground(accent)

@@ -47,9 +47,9 @@ func TestRecordingScreen(t *testing.T) {
 		wantErr   error
 		want      []string // en la vista (si no terminó)
 	}{
-		{name: "starts recording with pause focused", want: []string{"Grabando", "‖ Pausar", "■ Terminar", "←/→ mover", "p pausar"}},
-		{name: "enter on pause pauses", keys: []string{"enter"}, wantCalls: "pause", want: []string{"En pausa", "▶ Continuar", "p continuar"}},
-		{name: "enter again resumes", keys: []string{"enter", "enter"}, wantCalls: "pause,resume", want: []string{"Grabando", "‖ Pausar"}},
+		{name: "starts recording with pause focused", want: []string{"Grabando", "❙❙ Pausar", "▪ Terminar", "←/→ mover", "p pausar"}},
+		{name: "enter on pause pauses", keys: []string{"enter"}, wantCalls: "pause", want: []string{"En pausa", "▸ Continuar", "p continuar"}},
+		{name: "enter again resumes", keys: []string{"enter", "enter"}, wantCalls: "pause,resume", want: []string{"Grabando", "❙❙ Pausar"}},
 		{name: "p toggles from any focus", keys: []string{"right", "p"}, wantCalls: "pause", want: []string{"En pausa"}},
 		{name: "arrows wrap around", keys: []string{"left", "left", "enter"}, wantCalls: "pause"},
 		{name: "enter on stop finishes", keys: []string{"right", "enter"}, wantQuit: true},
