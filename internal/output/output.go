@@ -13,7 +13,7 @@ import (
 type Kind string
 
 const (
-	TODO       Kind = "todo"
+	Tasks      Kind = "tareas"
 	Transcript Kind = "transcript"
 	Audio      Kind = "audio"
 )
@@ -21,8 +21,8 @@ const (
 // FileName devuelve el nombre de archivo para cada tipo.
 func FileName(k Kind) string {
 	switch k {
-	case TODO:
-		return "TODO.md"
+	case Tasks:
+		return "tareas.md"
 	case Transcript:
 		return "transcripcion.md"
 	case Audio:
@@ -43,9 +43,9 @@ func Existing(dir string, kinds []Kind) []string {
 	return out
 }
 
-// WriteTODO guarda el TODO generado.
-func WriteTODO(dir, content string) (string, error) {
-	p := filepath.Join(dir, FileName(TODO))
+// WriteTasks guarda la lista de tareas generada.
+func WriteTasks(dir, content string) (string, error) {
+	p := filepath.Join(dir, FileName(Tasks))
 	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
 		return "", fmt.Errorf("escribir %s: %w", p, err)
 	}

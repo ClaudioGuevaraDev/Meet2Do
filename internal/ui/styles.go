@@ -19,7 +19,8 @@ var (
 			Foreground(lipgloss.Color("#FFFFFF")).
 			Background(purple).
 			Padding(0, 2).
-			MarginTop(1)
+			MarginTop(1).
+			MarginBottom(1)
 	subtleStyle  = lipgloss.NewStyle().Foreground(gray)
 	accentStyle  = lipgloss.NewStyle().Foreground(purple).Bold(true)
 	successStyle = lipgloss.NewStyle().Foreground(green).Bold(true)
@@ -36,7 +37,7 @@ func theme() *huh.Theme { return huh.ThemeCharm() }
 // Banner imprime el encabezado de la aplicación.
 func Banner() {
 	fmt.Println(bannerStyle.Render("🎙  Meet2Do"))
-	fmt.Println(subtleStyle.Render("  Graba tu reunión y conviértela en un TODO\n"))
+	fmt.Println(subtleStyle.Render("  Graba tu reunión y conviértela en una lista de tareas\n"))
 }
 
 // Success imprime una línea de éxito.

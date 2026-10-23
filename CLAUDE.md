@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Meet2Do is a Linux-only Go CLI that records a meeting (mic + system audio), transcribes it locally with whisper.cpp, and asks the `claude` or `codex` CLI to turn the transcript into a `TODO.md`. User-facing text (prompts, messages, the AI prompt, output file names) is in Spanish — keep it that way.
+Meet2Do is a Linux-only Go CLI that records a meeting (mic + system audio), transcribes it locally with whisper.cpp, and asks the `claude` or `codex` CLI to turn the transcript into a task list (`tareas.md`). User-facing text (prompts, messages, the AI prompt, output file names) is in Spanish — keep it that way.
 
 ## Commands
 
@@ -26,15 +26,15 @@ The app must stay **all-in-one**: users only need `claude` or `codex` on PATH. N
 
 ## Architecture
 
-`cmd/meet2do/main.go` is a linear orchestrator: a `session` struct carries state through small step methods (check `claude`/`codex` → `setup` (install screen for whatever is missing) → choose AI → record → choose outputs and folder → (transcribe) → (generate TODO) → write files). `-setup` runs only the install step. The root context comes from `signal.NotifyContext`. Each step lives in its own package under `internal/`:
+`cmd/meet2do/main.go` is a linear orchestrator: a `session` struct carries state through small step methods (check `claude`/`codex` → `setup` (install screen for whatever is missing) → choose AI → record → choose outputs and folder → (transcribe) → (generate tasks) → write files). `-setup` runs only the install step. The root context comes from `signal.NotifyContext`. Each step lives in its own package under `internal/`:
 
 - `recorder` — pure Go, no ffmpeg. `pulse.go` opens two `jfreymuth/pulse` record streams (default source = mic, monitor of default sink = system audio) at 16 kHz mono int16 (the server resamples). Each `Source` appends to its buffer; a goroutine mixes every 100 ms what both have (`Mix`, saturating) and streams it to disk via `wav.go` (header sizes patched on close). If one source lags more than 2 s (e.g. the monitor sends nothing while nothing plays) it is padded with silence, so a meeting is never held in RAM. `NewWithSources` injects fake sources for tests.
 - `transcriber` — `bundle.go` downloads the official whisper.cpp Linux build (`BundleTag`, per-arch asset + pinned SHA-256 in `bundles`), verifies it, extracts only `whisper-cli` + `lib*.so*` (rejecting unsafe tar paths/symlinks) into `$XDG_CACHE_HOME/meet2do/whisper/<tag>/` via an atomic rename; `whisper-cli` has `RUNPATH=$ORIGIN`, so no system install is needed. To upgrade whisper.cpp, change `BundleTag` and the hashes (GitHub shows each asset's `sha256` digest). `download.go` is the shared `.part`+rename downloader also used for `ggml-<model>.bin` from Hugging Face. `Transcribe` runs `whisper-cli -otxt -of <base>` and reads `<base>.txt`.
 - `ai` — `Provider` interface with `Claude` (`claude -p <prompt>`, transcript on stdin, reads stdout) and `Codex` (`codex exec --skip-git-repo-check --ephemeral --sandbox read-only -C <tmpdir> --output-last-message <file> -`, prompt+transcript on stdin, reads the file to avoid log noise). The shared instructions are in `ai/prompt.go`; `clean()` strips an enclosing ```markdown fence. Adding a provider = implement `Provider` and add it to `All()`.
-- `output` — fixed file names (`TODO.md`, `transcripcion.md`, `reunion.wav`) and writers.
+- `output` — fixed file names (`tareas.md`, `transcripcion.md`, `reunion.wav`) and writers.
 - `ui` — charmbracelet stack: `huh` forms for prompts, a `bubbletea` stopwatch screen for recording, `Install()` (install screen: one row per `Download` with a `bubbles/progress` bar, %, MB and speed, run sequentially; progress messages are throttled) and `Spin()` which runs a task in a goroutine behind a spinner. `Spin(ctx, …)` passes a derived context to the task and cancels it on Ctrl+C so child processes die. `ui.ErrAborted` (= `huh.ErrUserAborted`) is the cancellation signal; `main` maps it (and `context.Canceled`) to exit code 130.
 
-Transcription only runs if `TODO.md` or `transcripcion.md` was selected, and the AI only runs if `TODO.md` was selected. Everything intermediate goes in an `os.MkdirTemp` dir removed on exit.
+Transcription only runs if `tareas.md` or `transcripcion.md` was selected, and the AI only runs if `tareas.md` was selected. Everything intermediate goes in an `os.MkdirTemp` dir removed on exit.
 
 Errors are wrapped with `%w` and context; packages expose sentinel errors (`recorder.ErrNotStarted`/`ErrEmptyRecording`/`ErrNoAudioServer`, `transcriber.ErrChecksum`/`ErrUnsafeArchive`/`ErrUnsupportedPlatform`, `ai.ErrNoProvider`) for `errors.Is`. `transcriber.Whisper` has a useful zero value (empty `Model`/`Lang`/`BaseURL`/`BundleBaseURL` → defaults); the URLs let tests point downloads at `httptest`.
 

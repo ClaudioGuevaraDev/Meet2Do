@@ -1,13 +1,13 @@
 package ai
 
-// TODOPrompt son las instrucciones que recibe la IA junto con la transcripción.
-const TODOPrompt = `Eres un project manager técnico. A continuación tienes la transcripción
+// TasksPrompt son las instrucciones que recibe la IA junto con la transcripción.
+const TasksPrompt = `Eres un project manager técnico. A continuación tienes la transcripción
 automática de una reunión de equipo (puede contener errores de reconocimiento de voz).
 
-Extrae todas las tareas accionables y genera un archivo TODO en Markdown con exactamente
+Extrae todas las tareas accionables y genera una lista de tareas en Markdown con exactamente
 esta estructura (omite una sección si no tiene ítems):
 
-# TODO — <título breve de la reunión>
+# Tareas — <título breve de la reunión>
 
 ## Features
 ## Bugs

@@ -1,9 +1,10 @@
 # Meet2Do
 
-Versión: **0.3.0**
+Versión: **0.4.0**
 
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
-whisper.cpp y genera un `TODO.md` con features, bugs y correcciones usando Claude o Codex.
+whisper.cpp y genera una lista de tareas (`tareas.md`) con features, bugs y correcciones usando
+Claude o Codex.
 
 Es todo en uno: no necesitas instalar ffmpeg, whisper.cpp ni modelos. Lo que falta se
 descarga solo la primera vez, con una barra de progreso que indica qué se está descargando.
@@ -39,7 +40,7 @@ meet2do -version
 ```
 
 Flujo: eliges la IA → inicias la grabación (micrófono + audio del sistema) → Enter/q para
-terminar → eliges qué archivos generar (`TODO.md`, `transcripcion.md`, `reunion.wav`) →
+terminar → eliges qué archivos generar (`tareas.md`, `transcripcion.md`, `reunion.wav`) →
 eliges la carpeta (por defecto la actual).
 
 Si cambias de modelo con `-model`, el nuevo se descarga la próxima vez que lo uses.

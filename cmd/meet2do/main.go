@@ -1,4 +1,4 @@
-// Meet2Do graba una reunión, la transcribe con whisper.cpp y genera un TODO con Claude o Codex.
+// Meet2Do graba una reunión, la transcribe con whisper.cpp y genera una lista de tareas con Claude o Codex.
 package main
 
 import (
@@ -22,7 +22,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
@@ -233,7 +233,7 @@ func (s *session) writeOutputs(ctx context.Context) error {
 			return err
 		}
 	}
-	if !s.wants(output.TODO) && !s.wants(output.Transcript) {
+	if !s.wants(output.Tasks) && !s.wants(output.Transcript) {
 		return nil
 	}
 
@@ -246,15 +246,15 @@ func (s *session) writeOutputs(ctx context.Context) error {
 			return err
 		}
 	}
-	if !s.wants(output.TODO) || transcript == "" {
+	if !s.wants(output.Tasks) || transcript == "" {
 		return nil
 	}
 
-	todo, err := s.generateTODO(ctx, transcript)
+	tasks, err := s.generateTasks(ctx, transcript)
 	if err != nil {
 		return err
 	}
-	return s.save(output.WriteTODO(s.dir, todo))
+	return s.save(output.WriteTasks(s.dir, tasks))
 }
 
 // save registra la ruta escrita por un writer de output.
@@ -283,13 +283,13 @@ func (s *session) transcribe(ctx context.Context) (string, error) {
 	return transcript, nil
 }
 
-func (s *session) generateTODO(ctx context.Context, transcript string) (string, error) {
+func (s *session) generateTasks(ctx context.Context, transcript string) (string, error) {
 	name := s.provider.Name()
-	var todo string
-	err := ui.Spin(ctx, "Generando TODO con "+name+"…", "TODO generado con "+name, func(ctx context.Context, _ ui.Status) error {
+	var tasks string
+	err := ui.Spin(ctx, "Generando tareas con "+name+"…", "Tareas generadas con "+name, func(ctx context.Context, _ ui.Status) error {
 		var err error
-		todo, err = s.provider.GenerateTODO(ctx, transcript)
+		tasks, err = s.provider.GenerateTasks(ctx, transcript)
 		return err
 	})
-	return todo, err
+	return tasks, err
 }

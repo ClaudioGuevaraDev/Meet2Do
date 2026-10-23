@@ -23,7 +23,7 @@ func TestFileName(t *testing.T) {
 		kind output.Kind
 		want string
 	}{
-		{output.TODO, "TODO.md"},
+		{output.Tasks, "tareas.md"},
 		{output.Transcript, "transcripcion.md"},
 		{output.Audio, "reunion.wav"},
 		{output.Kind("otro"), "otro"},
@@ -41,7 +41,7 @@ func TestFileName(t *testing.T) {
 func TestExisting(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "TODO.md"), "x")
+	writeFile(t, filepath.Join(dir, "tareas.md"), "x")
 	writeFile(t, filepath.Join(dir, "reunion.wav"), "x")
 
 	tests := []struct {
@@ -51,7 +51,7 @@ func TestExisting(t *testing.T) {
 	}{
 		{"none requested", nil, []string{}},
 		{"none exist", []output.Kind{output.Transcript}, []string{}},
-		{"some exist", []output.Kind{output.TODO, output.Transcript, output.Audio}, []string{"TODO.md", "reunion.wav"}},
+		{"some exist", []output.Kind{output.Tasks, output.Transcript, output.Audio}, []string{"tareas.md", "reunion.wav"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -68,17 +68,17 @@ func TestExisting(t *testing.T) {
 	}
 }
 
-func TestWriteTODO(t *testing.T) {
+func TestWriteTasks(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	p, err := output.WriteTODO(dir, "# TODO\n")
+	p, err := output.WriteTasks(dir, "# Tareas\n")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if p != filepath.Join(dir, "TODO.md") {
+	if p != filepath.Join(dir, "tareas.md") {
 		t.Errorf("got path %q", p)
 	}
-	assertFile(t, p, []byte("# TODO\n"))
+	assertFile(t, p, []byte("# Tareas\n"))
 }
 
 func TestWriteTranscriptGolden(t *testing.T) {
@@ -131,7 +131,7 @@ func TestWriteErrors(t *testing.T) {
 		name string
 		fn   func() (string, error)
 	}{
-		{"todo in missing dir", func() (string, error) { return output.WriteTODO(missing, "x") }},
+		{"tasks in missing dir", func() (string, error) { return output.WriteTasks(missing, "x") }},
 		{"transcript in missing dir", func() (string, error) { return output.WriteTranscript(missing, "x", meetingDate) }},
 		{"audio in missing dir", func() (string, error) { return output.CopyAudio(missing, src) }},
 		{"audio missing source", func() (string, error) { return output.CopyAudio(t.TempDir(), missing) }},

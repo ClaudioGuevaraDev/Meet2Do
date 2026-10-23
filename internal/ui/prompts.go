@@ -27,7 +27,7 @@ func ChooseProvider(providers []ai.Provider) (ai.Provider, error) {
 	}
 	var idx int
 	err := run(huh.NewSelect[int]().
-		Title("¿Qué IA quieres usar para generar el TODO?").
+		Title("¿Qué IA quieres usar para generar las tareas?").
 		Options(opts...).
 		Value(&idx))
 	if err != nil {
@@ -50,12 +50,12 @@ func Confirm(title, desc string, def bool) (bool, error) {
 
 // ChooseOutputs pregunta qué archivos generar.
 func ChooseOutputs() ([]output.Kind, error) {
-	kinds := []output.Kind{output.TODO}
+	kinds := []output.Kind{output.Tasks}
 	err := run(huh.NewMultiSelect[output.Kind]().
 		Title("¿Qué archivos quieres generar?").
 		Description("Espacio para marcar, Enter para continuar").
 		Options(
-			huh.NewOption("TODO.md — tareas generadas por la IA", output.TODO).Selected(true),
+			huh.NewOption("tareas.md — tareas generadas por la IA", output.Tasks).Selected(true),
 			huh.NewOption("transcripcion.md — texto de la reunión", output.Transcript),
 			huh.NewOption("reunion.wav — audio grabado", output.Audio),
 		).

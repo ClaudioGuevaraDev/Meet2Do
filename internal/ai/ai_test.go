@@ -14,7 +14,7 @@ import (
 
 const transcript = "Juan dijo que el login falla."
 
-func TestClaudeGenerateTODO(t *testing.T) {
+func TestClaudeGenerateTasks(t *testing.T) {
 	tests := []struct {
 		name    string
 		script  string
@@ -23,18 +23,18 @@ func TestClaudeGenerateTODO(t *testing.T) {
 	}{
 		{
 			name:   "plain markdown",
-			script: "echo '# TODO'\necho '- [ ] arreglar login'\n",
-			want:   "# TODO\n- [ ] arreglar login\n",
+			script: "echo '# Tareas'\necho '- [ ] arreglar login'\n",
+			want:   "# Tareas\n- [ ] arreglar login\n",
 		},
 		{
 			name:   "fenced markdown is unwrapped",
-			script: "echo '```markdown'\necho '# TODO'\necho '```'\n",
-			want:   "# TODO\n",
+			script: "echo '```markdown'\necho '# Tareas'\necho '```'\n",
+			want:   "# Tareas\n",
 		},
 		{
 			name:   "surrounding whitespace is trimmed",
-			script: "echo\necho '  # TODO  '\necho\n",
-			want:   "# TODO\n",
+			script: "echo\necho '  # Tareas  '\necho\n",
+			want:   "# Tareas\n",
 		},
 		{
 			name:    "non-zero exit",
@@ -49,7 +49,7 @@ func TestClaudeGenerateTODO(t *testing.T) {
 			testutil.FakeBin(t, dir, "claude", tt.script)
 			testutil.IsolatedPath(t, dir)
 
-			got, err := ai.Claude{}.GenerateTODO(context.Background(), transcript)
+			got, err := ai.Claude{}.GenerateTasks(context.Background(), transcript)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
@@ -76,7 +76,7 @@ func TestClaudeReceivesPromptAndTranscript(t *testing.T) {
 	testutil.FakeBin(t, dir, "claude", `printf '%s\n' "$@" > `+args+"\ncat > "+stdin+"\necho ok\n")
 	testutil.IsolatedPath(t, dir)
 
-	if _, err := (ai.Claude{}).GenerateTODO(context.Background(), transcript); err != nil {
+	if _, err := (ai.Claude{}).GenerateTasks(context.Background(), transcript); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	assertFileContains(t, stdin, transcript)
@@ -84,7 +84,7 @@ func TestClaudeReceivesPromptAndTranscript(t *testing.T) {
 	assertFileContains(t, args, "Transcripción:")
 }
 
-func TestCodexGenerateTODO(t *testing.T) {
+func TestCodexGenerateTasks(t *testing.T) {
 	// El script busca el valor de --output-last-message y escribe ahí la respuesta.
 	const writeOut = `while [ $# -gt 0 ]; do [ "$1" = --output-last-message ] && out=$2; shift; done
 cat > /dev/null
@@ -97,13 +97,13 @@ cat > /dev/null
 	}{
 		{
 			name:   "reads last message file",
-			script: writeOut + "echo 'log noise'\nprintf '# TODO\\n- [ ] a\\n' > \"$out\"\n",
-			want:   "# TODO\n- [ ] a\n",
+			script: writeOut + "echo 'log noise'\nprintf '# Tareas\\n- [ ] a\\n' > \"$out\"\n",
+			want:   "# Tareas\n- [ ] a\n",
 		},
 		{
 			name:   "fenced markdown is unwrapped",
-			script: writeOut + "printf '```md\\n# TODO\\n```' > \"$out\"\n",
-			want:   "# TODO\n",
+			script: writeOut + "printf '```md\\n# Tareas\\n```' > \"$out\"\n",
+			want:   "# Tareas\n",
 		},
 		{
 			name:    "no output file",
@@ -123,7 +123,7 @@ cat > /dev/null
 			testutil.FakeBin(t, dir, "codex", tt.script)
 			testutil.IsolatedPath(t, dir)
 
-			got, err := ai.Codex{}.GenerateTODO(context.Background(), transcript)
+			got, err := ai.Codex{}.GenerateTasks(context.Background(), transcript)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("got error %v; want one containing %q", err, tt.wantErr)
@@ -146,19 +146,19 @@ func TestCodexReceivesPromptAndTranscriptOnStdin(t *testing.T) {
 	testutil.FakeBin(t, dir, "codex", "cat > "+stdin+"\nexit 1\n")
 	testutil.IsolatedPath(t, dir)
 
-	_, _ = ai.Codex{}.GenerateTODO(context.Background(), transcript) // solo interesa lo recibido
+	_, _ = ai.Codex{}.GenerateTasks(context.Background(), transcript) // solo interesa lo recibido
 	assertFileContains(t, stdin, "Transcripción:")
 	assertFileContains(t, stdin, transcript)
 }
 
-func TestGenerateTODOCancelled(t *testing.T) {
+func TestGenerateTasksCancelled(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FakeBin(t, dir, "claude", "exec sleep 10\n")
 	testutil.IsolatedPath(t, dir)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := (ai.Claude{}).GenerateTODO(ctx, transcript); err == nil {
+	if _, err := (ai.Claude{}).GenerateTasks(ctx, transcript); err == nil {
 		t.Fatal("expected error for cancelled context")
 	}
 }
