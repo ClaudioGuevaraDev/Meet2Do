@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -114,20 +115,20 @@ func TestInstallModel(t *testing.T) {
 		{
 			name: "first done keeps running",
 			msgs: []tea.Msg{itemDoneMsg{i: 0}},
-			want: []string{"✔ whisper.cpp"},
+			want: []string{"✓ whisper.cpp"},
 		},
 		{
 			name:     "all done quits",
 			msgs:     []tea.Msg{itemDoneMsg{i: 0}, itemDoneMsg{i: 1}},
 			wantQuit: true,
-			want:     []string{"✔ whisper.cpp", "✔ Modelo de voz"},
+			want:     []string{"✓ whisper.cpp", "✓ Modelo de voz"},
 		},
 		{
 			name:     "error quits with error",
 			msgs:     []tea.Msg{itemDoneMsg{i: 0, err: boom}},
 			wantQuit: true,
 			wantErr:  boom,
-			want:     []string{"✘ whisper.cpp"},
+			want:     []string{"✗ whisper.cpp"},
 			notWant:  []string{"Ctrl+C"},
 		},
 		{
@@ -157,6 +158,23 @@ func TestInstallModel(t *testing.T) {
 				if strings.Contains(view, w) {
 					t.Errorf("view should not contain %q:\n%s", w, view)
 				}
+			}
+		})
+	}
+}
+
+func TestBarWidth(t *testing.T) {
+	t.Parallel()
+	tests := []struct{ term, want int }{
+		{200, maxBarWidth},
+		{60, 20},
+		{30, minBarWidth},
+	}
+	for _, tt := range tests {
+		t.Run(fmt.Sprint(tt.term), func(t *testing.T) {
+			t.Parallel()
+			if got := barWidth(tt.term); got != tt.want {
+				t.Errorf("barWidth(%d) = %d; want %d", tt.term, got, tt.want)
 			}
 		})
 	}

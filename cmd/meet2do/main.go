@@ -22,7 +22,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.4.3"
+const version = "0.4.4"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
@@ -41,10 +41,15 @@ func main() {
 	stop()
 	if err != nil {
 		if errors.Is(err, ui.ErrAborted) || errors.Is(err, context.Canceled) {
-			fmt.Println(ui.Subtle("Cancelado."))
+			ui.Canceled()
 			os.Exit(130)
 		}
-		ui.Error(err.Error())
+		var step *ui.StepError
+		if errors.As(err, &step) {
+			ui.Failure(step.Summary, step.Err)
+		} else {
+			ui.Failure("No se pudo completar la operación.", err)
+		}
 		os.Exit(1)
 	}
 }
@@ -72,7 +77,7 @@ func run(ctx context.Context, model, lang string, setupOnly bool) error {
 	// Primero lo que no se puede descargar: sin claude/codex no tiene sentido instalar nada.
 	providers, err := ai.Available()
 	if err != nil {
-		return err
+		return ui.Fail("No se encontró una IA disponible.", err)
 	}
 	if err = s.setup(ctx, false); err != nil {
 		return err
@@ -98,10 +103,7 @@ func run(ctx context.Context, model, lang string, setupOnly bool) error {
 		return err
 	}
 
-	fmt.Println()
-	for _, p := range s.written {
-		ui.Success("Guardado " + p)
-	}
+	ui.Done(s.dir, s.written)
 	return nil
 }
 
@@ -117,7 +119,7 @@ func (s *session) setup(ctx context.Context, verbose bool) error {
 	ui.Info(fmt.Sprintf("Primera ejecución: Meet2Do descargará los componentes necesarios (~%s). Esto ocurre una sola vez.",
 		ui.FormatBytes(ui.TotalSize(downloads))))
 	if err := ui.Install(ctx, downloads); err != nil {
-		return err
+		return ui.Fail("No se pudieron instalar los componentes.", err)
 	}
 	ui.Success("Componentes instalados")
 	return nil
@@ -183,18 +185,18 @@ func (s *session) record() error {
 	s.audio = filepath.Join(s.tmpDir, "reunion.wav")
 	rec := recorder.New(s.audio)
 	if err := rec.Start(); err != nil {
-		return err
+		return ui.Fail("No se pudo iniciar la grabación.", err)
 	}
 	s.recorded = time.Now()
 	elapsed, uiErr := ui.RecordingScreen()
 	// Detener siempre la grabación, aunque la pantalla haya fallado.
 	if err := rec.Stop(); err != nil {
-		return err
+		return ui.Fail("No se pudo guardar la grabación.", err)
 	}
 	if uiErr != nil {
 		return uiErr
 	}
-	ui.Success(fmt.Sprintf("Grabación terminada (%s)", elapsed.Truncate(time.Second)))
+	ui.Success(fmt.Sprintf("Grabación completada · %s", elapsed.Truncate(time.Second)))
 	return nil
 }
 
@@ -260,7 +262,7 @@ func (s *session) writeOutputs(ctx context.Context) error {
 // save registra la ruta escrita por un writer de output.
 func (s *session) save(path string, err error) error {
 	if err != nil {
-		return err
+		return ui.Fail("No se pudieron guardar los archivos.", err)
 	}
 	s.written = append(s.written, path)
 	return nil
@@ -269,7 +271,7 @@ func (s *session) save(path string, err error) error {
 func (s *session) transcribe(ctx context.Context) (string, error) {
 	w := s.whisper // whisper.cpp y el modelo ya se descargaron en setup
 	var transcript string
-	err := ui.Spin(ctx, "Transcribiendo audio con whisper.cpp…", "Audio transcrito", func(ctx context.Context, _ ui.Status) error {
+	err := ui.Spin(ctx, "Transcribiendo reunión…", "Transcripción completada", "No se pudo completar la transcripción.", func(ctx context.Context, _ ui.Status) error {
 		var err error
 		transcript, err = w.Transcribe(ctx, s.audio)
 		return err
@@ -286,7 +288,7 @@ func (s *session) transcribe(ctx context.Context) (string, error) {
 func (s *session) generateTasks(ctx context.Context, transcript string) (string, error) {
 	name := s.provider.Name()
 	var tasks string
-	err := ui.Spin(ctx, "Generando tareas con "+name+"…", "Tareas generadas con "+name, func(ctx context.Context, _ ui.Status) error {
+	err := ui.Spin(ctx, "Generando tareas con "+name+"…", "Tareas generadas correctamente", "No se pudieron generar las tareas.", func(ctx context.Context, _ ui.Status) error {
 		var err error
 		tasks, err = s.provider.GenerateTasks(ctx, transcript)
 		return err

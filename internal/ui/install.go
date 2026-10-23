@@ -128,9 +128,19 @@ func newInstallModel(downloads []Download) installModel {
 	for i, d := range downloads {
 		items[i] = installItem{Download: d, total: d.Size}
 	}
-	bar := progress.New(progress.WithSolidFill(hex(brand)), progress.WithWidth(32), progress.WithoutPercentage())
+	bar := progress.New(progress.WithSolidFill(hex(brand)), progress.WithWidth(maxBarWidth), progress.WithoutPercentage())
 	bar.EmptyColor = hex(faint)
 	return installModel{items: items, bar: bar}
+}
+
+const (
+	maxBarWidth = 32
+	minBarWidth = 10
+)
+
+// barWidth adapta la barra al ancho de la terminal, dejando sitio para el % y los MB.
+func barWidth(termWidth int) int {
+	return max(minBarWidth, min(maxBarWidth, termWidth-40))
 }
 
 func (m installModel) Init() tea.Cmd { return nil }
@@ -141,6 +151,10 @@ func (m installModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			m.err = ErrAborted
 			return m, tea.Quit
+		}
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 { // 0 = ancho desconocido
+			m.bar.Width = barWidth(msg.Width)
 		}
 	case progressMsg:
 		it := &m.items[msg.i]
@@ -186,11 +200,11 @@ func (m installModel) itemView(it installItem) string {
 	title := fmt.Sprintf("%s %s", it.Name, Subtle("· "+it.Detail))
 	switch it.state {
 	case stateWaiting:
-		return fmt.Sprintf("  %s %s  %s\n", Subtle("○"), title, Subtle(FormatBytes(it.total)))
+		return fmt.Sprintf("  %s %s  %s\n", Subtle("◯"), title, Subtle(FormatBytes(it.total)))
 	case stateDone:
-		return fmt.Sprintf("  %s %s  %s\n", successStyle.Render("✔"), title, Subtle(FormatBytes(it.total)))
+		return fmt.Sprintf("  %s %s  %s\n", successStyle.Render(glyphSuccess), title, Subtle(FormatBytes(it.total)))
 	case stateFailed:
-		return fmt.Sprintf("  %s %s\n", errorStyle.Render("✘"), title)
+		return fmt.Sprintf("  %s %s\n", errorStyle.Render(glyphError), title)
 	case stateWorking:
 		return fmt.Sprintf("  %s %s\n    %s %s\n", brandStyle.Render("↓"), title, m.bar.ViewAs(1), Subtle(it.label+"…"))
 	}

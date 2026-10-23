@@ -3,7 +3,10 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -17,8 +20,8 @@ var (
 	success = lipgloss.AdaptiveColor{Dark: "#22C55E", Light: "#16A34A"}
 	warning = lipgloss.AdaptiveColor{Dark: "#F59E0B", Light: "#B45309"}
 	danger  = lipgloss.AdaptiveColor{Dark: "#EF4444", Light: "#DC2626"}
-	muted   = lipgloss.AdaptiveColor{Dark: "#9CA3AF", Light: "#6B7280"} // texto secundario
-	faint   = lipgloss.AdaptiveColor{Dark: "#6B7280", Light: "#9CA3AF"} // aún más secundario
+	muted   = lipgloss.AdaptiveColor{Dark: "#B4BAC4", Light: "#4B5563"} // texto secundario
+	faint   = lipgloss.AdaptiveColor{Dark: "#8B93A1", Light: "#6B7280"} // aún más secundario
 
 	brandStyle   = lipgloss.NewStyle().Foreground(brand).Bold(true)
 	mutedStyle   = lipgloss.NewStyle().Foreground(muted)
@@ -30,6 +33,14 @@ var (
 // logo es el símbolo de grabación del encabezado: un glifo de texto, no un emoji, para que
 // se vea igual en cualquier fuente.
 const logo = "◉"
+
+// Glifos de estado, comunes a todas las pantallas.
+const (
+	glyphSuccess = "✓"
+	glyphError   = "✗"
+	glyphWarn    = "!"
+	glyphInfo    = "›"
+)
 
 // theme es el tema de las preguntas: sin bordes ni fondos, pregunta en el color de marca,
 // selección en el color de interacción y textos secundarios atenuados.
@@ -48,15 +59,16 @@ func theme() *huh.Theme {
 	f.Directory = lipgloss.NewStyle().Foreground(brand)
 	f.File = lipgloss.NewStyle()
 
-	f.SelectSelector = lipgloss.NewStyle().Foreground(accent).Bold(true).SetString("› ")
+	// ❯ marca la opción enfocada; ◉/◯ si está marcada o no.
+	f.SelectSelector = lipgloss.NewStyle().Foreground(accent).Bold(true).SetString("❯ ")
 	f.MultiSelectSelector = f.SelectSelector
 	f.Option = lipgloss.NewStyle()
 	f.NextIndicator = lipgloss.NewStyle().Foreground(accent).MarginLeft(1).SetString("→")
 	f.PrevIndicator = lipgloss.NewStyle().Foreground(accent).MarginRight(1).SetString("←")
 	f.SelectedOption = lipgloss.NewStyle().Foreground(accent)
-	f.SelectedPrefix = lipgloss.NewStyle().Foreground(accent).SetString("✓ ")
+	f.SelectedPrefix = lipgloss.NewStyle().Foreground(accent).SetString("◉ ")
 	f.UnselectedOption = lipgloss.NewStyle()
-	f.UnselectedPrefix = lipgloss.NewStyle().Foreground(muted).SetString("○ ")
+	f.UnselectedPrefix = lipgloss.NewStyle().Foreground(muted).SetString("◯ ")
 
 	f.TextInput.Prompt = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	f.TextInput.Cursor = lipgloss.NewStyle().Foreground(accent)
@@ -87,6 +99,43 @@ func theme() *huh.Theme {
 	return t
 }
 
+// keymap son los atajos por defecto de huh con la ayuda en español: solo cambian los
+// textos que se muestran, no las teclas.
+func keymap() *huh.KeyMap {
+	k := huh.NewDefaultKeyMap()
+	help := func(b *key.Binding, keys, desc string) { b.SetHelp(keys, desc) }
+
+	help(&k.MultiSelect.Toggle, "espacio", "marcar")
+	help(&k.MultiSelect.Up, "↑", "subir")
+	help(&k.MultiSelect.Down, "↓", "bajar")
+	help(&k.MultiSelect.SelectAll, "ctrl+a", "todos")
+	help(&k.MultiSelect.SelectNone, "ctrl+a", "ninguno")
+	help(&k.MultiSelect.Filter, "/", "filtrar")
+	help(&k.MultiSelect.Next, "enter", "continuar")
+	help(&k.MultiSelect.Submit, "enter", "continuar")
+	help(&k.MultiSelect.Prev, "shift+tab", "volver")
+
+	help(&k.Select.Up, "↑", "subir")
+	help(&k.Select.Down, "↓", "bajar")
+	help(&k.Select.Filter, "/", "filtrar")
+	help(&k.Select.Next, "enter", "elegir")
+	help(&k.Select.Submit, "enter", "elegir")
+	help(&k.Select.Prev, "shift+tab", "volver")
+
+	help(&k.Confirm.Toggle, "←/→", "cambiar")
+	help(&k.Confirm.Next, "enter", "continuar")
+	help(&k.Confirm.Submit, "enter", "continuar")
+	help(&k.Confirm.Prev, "shift+tab", "volver")
+
+	help(&k.Input.Next, "enter", "continuar")
+	help(&k.Input.Submit, "enter", "continuar")
+	help(&k.Input.Prev, "shift+tab", "volver")
+	help(&k.Input.AcceptSuggestion, "ctrl+e", "completar")
+
+	k.Quit.SetHelp("ctrl+c", "salir")
+	return k
+}
+
 // confirmTheme es theme() sin el margen de la descripción: Confirm ya deja una línea en
 // blanco antes de sus botones.
 func confirmTheme() *huh.Theme {
@@ -109,16 +158,45 @@ func bannerText(version string) string {
 func Banner(version string) { fmt.Println(bannerText(version)) }
 
 // Success imprime una línea de éxito.
-func Success(msg string) { fmt.Println(successStyle.Render("✔") + " " + msg) }
+func Success(msg string) { fmt.Println(successStyle.Render(glyphSuccess) + " " + msg) }
 
 // Warn imprime una advertencia: algo salió distinto de lo esperado, pero el flujo sigue.
-func Warn(msg string) { fmt.Println(warnStyle.Render("!") + " " + msg) }
+func Warn(msg string) { fmt.Println(warnStyle.Render(glyphWarn) + " " + msg) }
 
 // Error imprime una línea de error.
-func Error(msg string) { fmt.Println(errorStyle.Render("✘") + " " + msg) }
+func Error(msg string) { fmt.Println(errorStyle.Render(glyphError) + " " + msg) }
 
 // Info imprime una línea informativa.
-func Info(msg string) { fmt.Println(brandStyle.Render("›") + " " + msg) }
+func Info(msg string) { fmt.Println(brandStyle.Render(glyphInfo) + " " + msg) }
+
+// Failure imprime un error: qué no se pudo hacer y, debajo, el motivo.
+func Failure(summary string, reason error) { fmt.Print(failureText(summary, reason)) }
+
+func failureText(summary string, reason error) string {
+	out := errorStyle.Render(glyphError) + " " + summary + "\n"
+	if reason != nil {
+		out += "  " + Subtle("Motivo: "+reason.Error()) + "\n"
+	}
+	return out
+}
+
+// Canceled indica que el usuario canceló la operación.
+func Canceled() { fmt.Println(Subtle("Operación cancelada.")) }
+
+// Done imprime el cierre con los archivos generados. Si dir no es la carpeta actual,
+// la muestra para que se sepa dónde quedaron.
+func Done(dir string, files []string) { fmt.Print(doneText(dir, files)) }
+
+func doneText(dir string, files []string) string {
+	out := "\n" + successStyle.Render(glyphSuccess) + " Archivos generados correctamente\n\n"
+	for _, f := range files {
+		out += "  " + filepath.Base(f) + "\n"
+	}
+	if cwd, err := os.Getwd(); err != nil || filepath.Clean(cwd) != filepath.Clean(dir) {
+		out += "  " + Subtle("en "+dir) + "\n"
+	}
+	return out
+}
 
 // Subtle formatea texto secundario.
 func Subtle(s string) string { return mutedStyle.Render(s) }

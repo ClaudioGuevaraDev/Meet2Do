@@ -14,6 +14,7 @@ var recDotStyle = lipgloss.NewStyle().Foreground(danger)
 type recordingModel struct {
 	sw    stopwatch.Model
 	blink bool
+	done  bool
 }
 
 type blinkMsg struct{}
@@ -29,6 +30,7 @@ func (m recordingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "enter", "q", "esc", "ctrl+c", " ":
+			m.done = true
 			return m, tea.Quit
 		}
 	case blinkMsg:
@@ -40,7 +42,11 @@ func (m recordingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// View deja de dibujarse al terminar: la reemplaza la línea "Grabación completada".
 func (m recordingModel) View() string {
+	if m.done {
+		return ""
+	}
 	dot := "●"
 	if m.blink {
 		dot = " "

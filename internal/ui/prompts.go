@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ func run(f huh.Field) error {
 	if _, ok := f.(*huh.Confirm); ok {
 		th = confirmTheme()
 	}
-	return huh.NewForm(huh.NewGroup(f)).WithTheme(th).Run()
+	return huh.NewForm(huh.NewGroup(f)).WithTheme(th).WithKeyMap(keymap()).Run()
 }
 
 // ChooseProvider pregunta qué IA usar entre las disponibles.
@@ -57,11 +58,10 @@ func ChooseOutputs() ([]output.Kind, error) {
 	kinds := []output.Kind{output.Tasks}
 	err := run(huh.NewMultiSelect[output.Kind]().
 		Title("¿Qué archivos quieres generar?").
-		Description("Espacio para marcar, Enter para continuar").
 		Options(
-			huh.NewOption("tareas.md — tareas generadas por la IA", output.Tasks).Selected(true),
-			huh.NewOption("transcripcion.md — texto de la reunión", output.Transcript),
-			huh.NewOption("reunion.wav — audio grabado", output.Audio),
+			huh.NewOption(outputLabel(output.Tasks, "Tareas generadas por IA"), output.Tasks).Selected(true),
+			huh.NewOption(outputLabel(output.Transcript, "Texto de la reunión"), output.Transcript),
+			huh.NewOption(outputLabel(output.Audio, "Audio grabado"), output.Audio),
 		).
 		Validate(func(k []output.Kind) error {
 			if len(k) == 0 {
@@ -71,6 +71,12 @@ func ChooseOutputs() ([]output.Kind, error) {
 		}).
 		Value(&kinds))
 	return kinds, err
+}
+
+// outputLabel alinea el nombre del archivo en una columna y atenúa su descripción, de modo
+// que al marcarlo solo el nombre toma el color de selección.
+func outputLabel(k output.Kind, desc string) string {
+	return fmt.Sprintf("%-18s", output.FileName(k)) + mutedStyle.Render(desc)
 }
 
 // ChooseDir pregunta dónde guardar los archivos (por defecto la carpeta actual).

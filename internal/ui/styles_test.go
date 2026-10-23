@@ -1,11 +1,20 @@
 package ui
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
 )
 
 func TestPalette(t *testing.T) {
@@ -20,7 +29,8 @@ func TestPalette(t *testing.T) {
 		{"success", success, "#22C55E"},
 		{"warning", warning, "#F59E0B"},
 		{"danger", danger, "#EF4444"},
-		{"muted", muted, "#9CA3AF"},
+		{"muted", muted, "#B4BAC4"},
+		{"faint", faint, "#8B93A1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -130,5 +140,115 @@ func TestBanner(t *testing.T) {
 	}
 	if lines := strings.Count(strings.TrimSpace(got), "\n") + 1; lines != 2 {
 		t.Errorf("banner should be 2 lines, got %d", lines)
+	}
+}
+
+func TestThemeGlyphs(t *testing.T) {
+	t.Parallel()
+	th := theme()
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"select selector", th.Focused.SelectSelector.String(), "❯ "},
+		{"multiselect selector", th.Focused.MultiSelectSelector.String(), "❯ "},
+		{"selected prefix", th.Focused.SelectedPrefix.String(), "◉ "},
+		{"unselected prefix", th.Focused.UnselectedPrefix.String(), "◯ "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ansi.Strip(tt.got); got != tt.want {
+				t.Errorf("glyph = %q; want %q", got, tt.want)
+			}
+		})
+	}
+	// Sin foco, el selector debe ocupar lo mismo para que las opciones no se muevan.
+	if f, b := lipgloss.Width(th.Focused.MultiSelectSelector.String()), lipgloss.Width(th.Blurred.MultiSelectSelector.String()); f != b {
+		t.Errorf("blurred selector width = %d; want %d", b, f)
+	}
+}
+
+func TestKeymapKeepsKeys(t *testing.T) {
+	t.Parallel()
+	def, k := huh.NewDefaultKeyMap(), keymap()
+	tests := []struct {
+		name     string
+		got      key.Binding
+		want     key.Binding
+		wantHelp string
+	}{
+		{"multiselect toggle", k.MultiSelect.Toggle, def.MultiSelect.Toggle, "marcar"},
+		{"multiselect next", k.MultiSelect.Next, def.MultiSelect.Next, "continuar"},
+		{"multiselect up", k.MultiSelect.Up, def.MultiSelect.Up, "subir"},
+		{"multiselect down", k.MultiSelect.Down, def.MultiSelect.Down, "bajar"},
+		{"select next", k.Select.Next, def.Select.Next, "elegir"},
+		{"confirm toggle", k.Confirm.Toggle, def.Confirm.Toggle, "cambiar"},
+		{"input next", k.Input.Next, def.Input.Next, "continuar"},
+		{"quit", k.Quit, def.Quit, "salir"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if !slices.Equal(tt.got.Keys(), tt.want.Keys()) {
+				t.Errorf("keys = %v; want %v", tt.got.Keys(), tt.want.Keys())
+			}
+			if tt.got.Enabled() != tt.want.Enabled() {
+				t.Errorf("enabled = %v; want %v", tt.got.Enabled(), tt.want.Enabled())
+			}
+			if got := tt.got.Help().Desc; got != tt.wantHelp {
+				t.Errorf("help = %q; want %q", got, tt.wantHelp)
+			}
+		})
+	}
+}
+
+func TestOutputLabelAligned(t *testing.T) {
+	t.Parallel()
+	a := ansi.Strip(outputLabel(output.Tasks, "x"))
+	b := ansi.Strip(outputLabel(output.Transcript, "x"))
+	if strings.Index(a, "x") != strings.Index(b, "x") {
+		t.Errorf("descriptions should be aligned:\n%q\n%q", a, b)
+	}
+}
+
+func TestFailureText(t *testing.T) {
+	t.Parallel()
+	got := ansi.Strip(failureText("No se pudo completar la transcripción.", errors.New("boom")))
+	want := "✗ No se pudo completar la transcripción.\n  Motivo: boom\n"
+	if got != want {
+		t.Errorf("failureText = %q; want %q", got, want)
+	}
+}
+
+func TestDoneText(t *testing.T) {
+	t.Parallel()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := []string{filepath.Join(cwd, "tareas.md"), filepath.Join(cwd, "transcripcion.md")}
+	tests := []struct {
+		name    string
+		dir     string
+		wantDir bool
+	}{
+		{"current dir hides folder", cwd, false},
+		{"other dir shows folder", "/otra/carpeta", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ansi.Strip(doneText(tt.dir, files))
+			for _, w := range []string{"✓ Archivos generados correctamente", "\n  tareas.md\n", "\n  transcripcion.md\n"} {
+				if !strings.Contains(got, w) {
+					t.Errorf("should contain %q:\n%s", w, got)
+				}
+			}
+			if strings.Contains(got, "en "+tt.dir) != tt.wantDir {
+				t.Errorf("folder shown = %v; want %v:\n%s", !tt.wantDir, tt.wantDir, got)
+			}
+		})
 	}
 }
