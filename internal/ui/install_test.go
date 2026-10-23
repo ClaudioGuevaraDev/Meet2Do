@@ -205,3 +205,30 @@ func TestInstallTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestUnknownSizeShowsCalculating(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		msgs []tea.Msg
+		want string
+	}{
+		{"waiting", nil, "Meet2Do v9.9.9 · versión nueva  calculando…"},
+		{"downloading without content length", []tea.Msg{progressMsg{i: 0, done: 1024, total: -1, at: time.Now()}}, "1.0 KB / calculando…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Un modelo por subtest: comparten el slice de items si se copia el mismo.
+			m := newInstallModel([]Download{{Name: "Meet2Do v9.9.9", Detail: "versión nueva"}}) // Size 0: no se conoce
+			got, _ := step(t, m, tt.msgs...)
+			view := ansi.Strip(got.View())
+			if !strings.Contains(view, tt.want) {
+				t.Errorf("view should contain %q:\n%s", tt.want, view)
+			}
+			if strings.Contains(view, "?") {
+				t.Errorf("view should not show ?:\n%s", view)
+			}
+		})
+	}
+}

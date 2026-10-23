@@ -217,9 +217,9 @@ func (m installModel) itemView(it installItem) string {
 	title := fmt.Sprintf("%s %s", it.Name, Subtle("· "+it.Detail))
 	switch it.state {
 	case stateWaiting:
-		return fmt.Sprintf("  %s %s  %s\n", Subtle(glyphPending), title, Subtle(FormatBytes(it.total)))
+		return fmt.Sprintf("  %s %s  %s\n", Subtle(glyphPending), title, Subtle(formatSize(it.total)))
 	case stateDone:
-		return fmt.Sprintf("  %s %s  %s\n", successStyle.Render(glyphSuccess), title, Subtle(FormatBytes(it.total)))
+		return fmt.Sprintf("  %s %s  %s\n", successStyle.Render(glyphSuccess), title, Subtle(formatSize(it.total)))
 	case stateFailed:
 		return fmt.Sprintf("  %s %s\n", errorStyle.Render(glyphError), title)
 	case stateWorking:
@@ -231,7 +231,7 @@ func (m installModel) itemView(it installItem) string {
 	}
 	return fmt.Sprintf("  %s %s\n    %s %3.0f%%  %s\n",
 		brandStyle.Render(glyphDownload), title, m.bar.ViewAs(pct), pct*100,
-		Subtle(fmt.Sprintf("%s / %s · %s", formatDone(it.done), FormatBytes(it.total), FormatSpeed(it.speed))))
+		Subtle(fmt.Sprintf("%s / %s · %s", formatDone(it.done), formatSize(it.total), FormatSpeed(it.speed))))
 }
 
 // FormatBytes muestra un tamaño en KB/MB/GB (base 1024).
@@ -248,6 +248,15 @@ func FormatBytes(n int64) string {
 		return fmt.Sprintf("%.1f MB", float64(n)/(unit*unit))
 	}
 	return fmt.Sprintf("%.2f GB", float64(n)/(unit*unit*unit))
+}
+
+// formatSize muestra el tamaño de un componente; mientras no se conoce (p. ej. una
+// actualización antes de empezar a bajar), "calculando…".
+func formatSize(n int64) string {
+	if n <= 0 {
+		return "calculando…"
+	}
+	return FormatBytes(n)
 }
 
 // formatDone muestra los bytes descargados (0 es "0 B", no "desconocido").

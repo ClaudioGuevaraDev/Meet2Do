@@ -1,6 +1,6 @@
 # Meet2Do
 
-Versión: **0.11.1**
+Versión: **0.11.2**
 
 Graba el audio de una reunión (Google Meet, Teams, Zoom…), lo transcribe localmente con
 whisper.cpp y genera con Claude o Codex una lista de tareas (`tareas.md`) con features, bugs y
