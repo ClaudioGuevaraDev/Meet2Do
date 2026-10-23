@@ -26,7 +26,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.11.2"
+const version = "0.11.3"
 
 // Main es el punto de entrada de meet2do y m2do.
 func Main() {
