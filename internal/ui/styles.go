@@ -38,7 +38,9 @@ var (
 func theme() *huh.Theme {
 	t := huh.ThemeCharm()
 	f := &t.Focused
-	f.Title = f.Title.Foreground(primary)
+	// Una línea en blanco entre la pregunta, su descripción y las opciones.
+	f.Title = f.Title.Foreground(primary).MarginBottom(1)
+	f.Description = f.Description.MarginBottom(1)
 	f.NoteTitle = f.NoteTitle.Foreground(primary)
 	f.Directory = f.Directory.Foreground(primary)
 	f.SelectSelector = f.SelectSelector.Foreground(primary)
@@ -55,6 +57,16 @@ func theme() *huh.Theme {
 	t.Blurred.Base, t.Blurred.Card = b.Base, b.Card
 	t.Blurred.NextIndicator, t.Blurred.PrevIndicator = b.NextIndicator, b.PrevIndicator
 	t.Group.Title = t.Focused.Title
+	t.Group.Description = t.Focused.Description
+	return t
+}
+
+// confirmTheme es theme() sin el margen de la descripción: Confirm ya deja una línea en
+// blanco antes de sus botones.
+func confirmTheme() *huh.Theme {
+	t := theme()
+	t.Focused.Description = t.Focused.Description.MarginBottom(0)
+	t.Blurred.Description = t.Blurred.Description.MarginBottom(0)
 	return t
 }
 

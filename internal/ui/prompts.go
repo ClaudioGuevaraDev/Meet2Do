@@ -16,7 +16,11 @@ import (
 var ErrAborted = huh.ErrUserAborted
 
 func run(f huh.Field) error {
-	return huh.NewForm(huh.NewGroup(f)).WithTheme(theme()).Run()
+	th := theme()
+	if _, ok := f.(*huh.Confirm); ok {
+		th = confirmTheme()
+	}
+	return huh.NewForm(huh.NewGroup(f)).WithTheme(th).Run()
 }
 
 // ChooseProvider pregunta qué IA usar entre las disponibles.

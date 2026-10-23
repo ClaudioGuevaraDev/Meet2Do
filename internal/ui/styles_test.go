@@ -42,3 +42,29 @@ func TestThemeUsesPrimaryColor(t *testing.T) {
 		t.Error("error message should keep its semantic red")
 	}
 }
+
+func TestThemeSpacing(t *testing.T) {
+	t.Parallel()
+	th, confirm := theme(), confirmTheme()
+	tests := []struct {
+		name string
+		got  int
+		want int
+	}{
+		{"title", th.Focused.Title.GetMarginBottom(), 1},
+		{"blurred title", th.Blurred.Title.GetMarginBottom(), 1},
+		{"description", th.Focused.Description.GetMarginBottom(), 1},
+		{"blurred description", th.Blurred.Description.GetMarginBottom(), 1},
+		{"confirm title", confirm.Focused.Title.GetMarginBottom(), 1},
+		{"confirm description", confirm.Focused.Description.GetMarginBottom(), 0},
+		{"confirm blurred description", confirm.Blurred.Description.GetMarginBottom(), 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.got != tt.want {
+				t.Errorf("margin bottom = %d; want %d", tt.got, tt.want)
+			}
+		})
+	}
+}
