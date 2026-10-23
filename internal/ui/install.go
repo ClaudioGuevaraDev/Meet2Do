@@ -130,7 +130,7 @@ func newInstallModel(downloads []Download) installModel {
 	}
 	return installModel{
 		items: items,
-		bar:   progress.New(progress.WithGradient("#7C3AED", "#34D399"), progress.WithWidth(32), progress.WithoutPercentage()),
+		bar:   progress.New(progress.WithSolidFill(string(primary)), progress.WithWidth(32), progress.WithoutPercentage()),
 	}
 }
 
