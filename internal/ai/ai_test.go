@@ -231,3 +231,72 @@ func assertFileContains(t *testing.T, path, want string) {
 		t.Errorf("%s does not contain %q:\n%s", filepath.Base(path), want, data)
 	}
 }
+
+func TestProviderArgs(t *testing.T) {
+	// Cada script guarda sus argumentos (uno por línea) y responde algo válido.
+	const record = `printf '%s\n' "$@" > "$(dirname "$0")/args.txt"
+while [ $# -gt 0 ]; do [ "$1" = --output-last-message ] && out=$2; shift; done
+cat > /dev/null
+[ -n "$out" ] && echo ok > "$out"
+echo ok
+`
+	tests := []struct {
+		name    string
+		bin     string
+		p       ai.Provider
+		want    []string
+		notWant []string
+	}{
+		{name: "claude default passes no flags", bin: "claude", p: ai.Claude{}, notWant: []string{"--model", "--effort"}},
+		{name: "claude model and effort", bin: "claude", p: ai.Claude{}.With("haiku", "low"), want: []string{"--model\nhaiku\n", "--effort\nlow\n"}},
+		{name: "claude only effort", bin: "claude", p: ai.Claude{}.With("", "max"), want: []string{"--effort\nmax\n"}, notWant: []string{"--model"}},
+		{name: "codex default passes no flags", bin: "codex", p: ai.Codex{}, notWant: []string{"-m\n", "model_reasoning_effort"}},
+		{name: "codex model and effort", bin: "codex", p: ai.Codex{}.With("gpt-x", "high"), want: []string{"-m\ngpt-x\n", "-c\nmodel_reasoning_effort=\"high\"\n"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			testutil.FakeBin(t, dir, tt.bin, record)
+			testutil.IsolatedPath(t, dir)
+
+			if _, err := tt.p.GenerateTasks(context.Background(), transcript); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			data, err := os.ReadFile(filepath.Join(dir, "args.txt"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(string(data), w) {
+					t.Errorf("args should contain %q:\n%s", w, data)
+				}
+			}
+			for _, w := range tt.notWant {
+				if strings.Contains(string(data), w) {
+					t.Errorf("args should not contain %q:\n%s", w, data)
+				}
+			}
+		})
+	}
+}
+
+func TestLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		p    ai.Provider
+		want string
+	}{
+		{ai.Claude{}, "Claude"},
+		{ai.Claude{}.With("opus", "high"), "Claude (opus · high)"},
+		{ai.Codex{}.With("gpt-x", ""), "Codex (gpt-x)"},
+		{ai.Codex{}.With("", "low"), "Codex (low)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			t.Parallel()
+			if got := tt.p.Label(); got != tt.want {
+				t.Errorf("Label() = %q; want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/ClaudioGuevaraDev/Meet2Do/internal/ai"
 	"github.com/ClaudioGuevaraDev/Meet2Do/internal/output"
 )
 
@@ -248,6 +249,98 @@ func TestDoneText(t *testing.T) {
 			}
 			if strings.Contains(got, "en "+tt.dir) != tt.wantDir {
 				t.Errorf("folder shown = %v; want %v:\n%s", !tt.wantDir, tt.wantDir, got)
+			}
+		})
+	}
+}
+
+func TestModelOptions(t *testing.T) {
+	t.Parallel()
+	opts := modelOptions("Claude", ai.Catalog{Models: []ai.Model{{ID: "opus", Name: "Opus"}, {ID: "haiku", Name: "Haiku"}}})
+	if len(opts) != 3 {
+		t.Fatalf("got %d options; want 3", len(opts))
+	}
+	if !strings.HasPrefix(ansi.Strip(opts[0].Key), defaultLabel) || opts[0].Value != 0 {
+		t.Errorf("first option = %q (%d); want %q (0)", opts[0].Key, opts[0].Value, defaultLabel)
+	}
+	if got := ansi.Strip(opts[1].Key); !strings.Contains(got, "Opus") || !strings.Contains(got, "opus") || opts[1].Value != 1 {
+		t.Errorf("second option = %q (%d)", got, opts[1].Value)
+	}
+}
+
+func TestEffortOptions(t *testing.T) {
+	t.Parallel()
+	opts := effortOptions([]string{"low", "weird"}, ai.Setting{})
+	tests := []struct {
+		name      string
+		opt       huh.Option[string]
+		wantValue string
+		wantKey   string
+	}{
+		{"default first", opts[0], "", defaultLabel},
+		{"known level is described", opts[1], "low", "más rápido"},
+		{"unknown level is shown as is", opts[2], "weird", "weird"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.opt.Value != tt.wantValue || !strings.Contains(ansi.Strip(tt.opt.Key), tt.wantKey) {
+				t.Errorf("option = %q (%q); want key with %q and value %q", tt.opt.Key, tt.opt.Value, tt.wantKey, tt.wantValue)
+			}
+		})
+	}
+	if ansi.Strip(opts[2].Key) != "weird" {
+		t.Errorf("unknown level should have no description padding: %q", opts[2].Key)
+	}
+}
+
+// Regresión: huh ubica el cursor y el scroll al recibir las opciones; la primera fila
+// ("Por defecto", con el cursor) debe verse al abrir la pregunta.
+func TestSelectShowsDefaultFirst(t *testing.T) {
+	t.Parallel()
+	cat := ai.Catalog{Models: []ai.Model{{ID: "fable", Name: "Fable"}, {ID: "opus", Name: "Opus"}}}
+	var idx int
+	var effort string
+	tests := []struct {
+		name  string
+		field huh.Field
+	}{
+		{"model", modelSelect("Claude", cat, &idx)},
+		{"effort", effortSelect([]string{"low", "high"}, ai.Setting{}, &effort)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			f := huh.NewForm(huh.NewGroup(tt.field)).WithTheme(theme()).WithKeyMap(keymap())
+			f.Init()
+			view := ansi.Strip(f.View())
+			if !strings.Contains(view, "❯ "+defaultLabel) {
+				t.Errorf("the cursor should be on %q:\n%s", defaultLabel, view)
+			}
+		})
+	}
+}
+
+func TestDefaultOptionShowsResolvedValue(t *testing.T) {
+	t.Parallel()
+	known := ai.Setting{Value: "Opus", Source: "~/.claude/settings.json"}
+	tests := []struct {
+		name string
+		key  string
+		want string
+	}{
+		{"known model", modelOptions("Claude", ai.Catalog{DefaultModel: known})[0].Key, "Opus · ~/.claude/settings.json"},
+		{"unknown model", modelOptions("Claude", ai.Catalog{})[0].Key, "el que elija Claude según tu cuenta"},
+		{"known effort", effortOptions(nil, ai.Setting{Value: "low", Source: "predeterminado del modelo"})[0].Key, "low · predeterminado del modelo"},
+		{"effort without source", effortOptions(nil, ai.Setting{Value: "high"})[0].Key, "high"},
+		{"unknown effort", effortOptions(nil, ai.Setting{})[0].Key, "el que use el modelo"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ansi.Strip(tt.key)
+			if !strings.HasPrefix(got, defaultLabel) || !strings.HasSuffix(got, tt.want) {
+				t.Errorf("default option = %q; want %q … %q", got, defaultLabel, tt.want)
 			}
 		})
 	}

@@ -22,7 +22,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.4.4"
+const version = "0.5.0"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
@@ -83,6 +83,9 @@ func run(ctx context.Context, model, lang string, setupOnly bool) error {
 		return err
 	}
 	if err = s.chooseProvider(providers); err != nil {
+		return err
+	}
+	if err = s.chooseModel(ctx); err != nil {
 		return err
 	}
 
@@ -171,6 +174,25 @@ func (s *session) chooseProvider(providers []ai.Provider) error {
 	var err error
 	s.provider, err = ui.ChooseProvider(providers)
 	return err
+}
+
+// chooseModel pregunta el modelo y el esfuerzo; "Por defecto" deja la configuración del CLI.
+func (s *session) chooseModel(ctx context.Context) error {
+	cat := s.provider.Catalog(ctx)
+	model, err := ui.ChooseModel(s.provider.Name(), cat)
+	if err != nil {
+		return err
+	}
+	efforts := model.Efforts
+	if model.ID == "" {
+		efforts = cat.DefaultEfforts
+	}
+	effort, err := ui.ChooseEffort(efforts, cat.DefaultEffort(model))
+	if err != nil {
+		return err
+	}
+	s.provider = s.provider.With(model.ID, effort)
+	return nil
 }
 
 func (s *session) record() error {
@@ -286,7 +308,7 @@ func (s *session) transcribe(ctx context.Context) (string, error) {
 }
 
 func (s *session) generateTasks(ctx context.Context, transcript string) (string, error) {
-	name := s.provider.Name()
+	name := s.provider.Label()
 	var tasks string
 	err := ui.Spin(ctx, "Generando tareas con "+name+"…", "Tareas generadas correctamente", "No se pudieron generar las tareas.", func(ctx context.Context, _ ui.Status) error {
 		var err error

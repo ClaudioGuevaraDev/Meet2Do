@@ -41,6 +41,100 @@ func ChooseProvider(providers []ai.Provider) (ai.Provider, error) {
 	return providers[idx], nil
 }
 
+// defaultLabel es la primera opción de modelo y esfuerzo: no pasa ningún flag al CLI.
+const defaultLabel = "Por defecto"
+
+// effortDesc describe en español los niveles de esfuerzo conocidos.
+var effortDesc = map[string]string{
+	"low":    "más rápido",
+	"medium": "equilibrado",
+	"high":   "más razonamiento",
+	"xhigh":  "razonamiento extra",
+	"max":    "máximo razonamiento",
+	"ultra":  "máximo, con delegación",
+}
+
+// optionLabel alinea name en una columna y atenúa desc, como en el selector de archivos.
+func optionLabel(name, desc string) string {
+	if desc == "" {
+		return name
+	}
+	return fmt.Sprintf("%-18s", name) + mutedStyle.Render(desc)
+}
+
+// settingDesc describe un valor por defecto como "valor · origen", o fallback si no se sabe.
+func settingDesc(s ai.Setting, fallback string) string {
+	switch {
+	case s.Value == "":
+		return fallback
+	case s.Source == "":
+		return s.Value
+	}
+	return s.Value + " · " + s.Source
+}
+
+// modelOptions arma las opciones de ChooseModel: "Por defecto" (0, el valor cero) y luego
+// cada modelo como su índice + 1.
+func modelOptions(provider string, cat ai.Catalog) []huh.Option[int] {
+	desc := settingDesc(cat.DefaultModel, "el que elija "+provider+" según tu cuenta")
+	opts := []huh.Option[int]{huh.NewOption(optionLabel(defaultLabel, desc), 0)}
+	for i, m := range cat.Models {
+		opts = append(opts, huh.NewOption(optionLabel(m.Name, m.ID), i+1))
+	}
+	return opts
+}
+
+// modelSelect arma la pregunta de modelo. Value va antes que Options: huh ubica el cursor
+// y el scroll al recibir las opciones, y sin el valor real dejaría oculta la primera fila.
+func modelSelect(provider string, cat ai.Catalog, idx *int) *huh.Select[int] {
+	return huh.NewSelect[int]().
+		Title("¿Qué modelo de " + provider + " quieres usar?").
+		Value(idx).
+		Options(modelOptions(provider, cat)...)
+}
+
+// ChooseModel pregunta qué modelo usar. Devuelve un Model vacío para "Por defecto" o si
+// no hay modelos para elegir (en ese caso no pregunta).
+func ChooseModel(provider string, cat ai.Catalog) (ai.Model, error) {
+	if len(cat.Models) == 0 {
+		return ai.Model{}, nil
+	}
+	var idx int
+	if err := run(modelSelect(provider, cat, &idx)); err != nil || idx == 0 {
+		return ai.Model{}, err
+	}
+	return cat.Models[idx-1], nil
+}
+
+// effortOptions arma las opciones de ChooseEffort: "Por defecto" ("") y luego cada nivel.
+func effortOptions(efforts []string, def ai.Setting) []huh.Option[string] {
+	desc := settingDesc(def, "el que use el modelo")
+	opts := []huh.Option[string]{huh.NewOption(optionLabel(defaultLabel, desc), "")}
+	for _, e := range efforts {
+		opts = append(opts, huh.NewOption(optionLabel(e, effortDesc[e]), e))
+	}
+	return opts
+}
+
+// effortSelect arma la pregunta de esfuerzo (Value antes que Options, ver modelSelect).
+func effortSelect(efforts []string, def ai.Setting, effort *string) *huh.Select[string] {
+	return huh.NewSelect[string]().
+		Title("¿Qué nivel de esfuerzo?").
+		Value(effort).
+		Options(effortOptions(efforts, def)...)
+}
+
+// ChooseEffort pregunta el nivel de esfuerzo; def es el que se usa con "Por defecto".
+// Devuelve "" para "Por defecto" o si no hay niveles para elegir (en ese caso no pregunta).
+func ChooseEffort(efforts []string, def ai.Setting) (string, error) {
+	if len(efforts) == 0 {
+		return "", nil
+	}
+	var effort string
+	err := run(effortSelect(efforts, def, &effort))
+	return effort, err
+}
+
 // Confirm hace una pregunta de sí/no.
 func Confirm(title, desc string, def bool) (bool, error) {
 	v := def
@@ -76,7 +170,7 @@ func ChooseOutputs() ([]output.Kind, error) {
 // outputLabel alinea el nombre del archivo en una columna y atenúa su descripción, de modo
 // que al marcarlo solo el nombre toma el color de selección.
 func outputLabel(k output.Kind, desc string) string {
-	return fmt.Sprintf("%-18s", output.FileName(k)) + mutedStyle.Render(desc)
+	return optionLabel(output.FileName(k), desc)
 }
 
 // ChooseDir pregunta dónde guardar los archivos (por defecto la carpeta actual).
