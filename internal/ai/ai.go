@@ -1,0 +1,102 @@
+// Package ai genera el TODO usando el CLI de Claude o de Codex.
+package ai
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+)
+
+// Provider genera un TODO en Markdown a partir de una transcripción.
+type Provider interface {
+	Name() string
+	Binary() string
+	GenerateTODO(ctx context.Context, transcript string) (string, error)
+}
+
+// All devuelve los proveedores soportados.
+func All() []Provider { return []Provider{Claude{}, Codex{}} }
+
+// Available devuelve los proveedores cuyo CLI está en el PATH.
+func Available() []Provider {
+	var out []Provider
+	for _, p := range All() {
+		if _, err := exec.LookPath(p.Binary()); err == nil {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// Claude usa `claude -p`.
+type Claude struct{}
+
+func (Claude) Name() string   { return "Claude" }
+func (Claude) Binary() string { return "claude" }
+
+func (c Claude) GenerateTODO(ctx context.Context, transcript string) (string, error) {
+	cmd := exec.CommandContext(ctx, c.Binary(), "-p", TODOPrompt)
+	cmd.Stdin = strings.NewReader(transcript)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("claude falló: %v: %s", err, strings.TrimSpace(stderr.String()))
+	}
+	return clean(stdout.String()), nil
+}
+
+// Codex usa `codex exec` y lee la respuesta final desde --output-last-message.
+type Codex struct{}
+
+func (Codex) Name() string   { return "Codex" }
+func (Codex) Binary() string { return "codex" }
+
+func (c Codex) GenerateTODO(ctx context.Context, transcript string) (string, error) {
+	dir, err := os.MkdirTemp("", "meet2do-codex-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(dir)
+	out := filepath.Join(dir, "todo.md")
+
+	cmd := exec.CommandContext(ctx, c.Binary(), "exec",
+		"--skip-git-repo-check", "--ephemeral",
+		"--sandbox", "read-only",
+		"-C", dir,
+		"--output-last-message", out,
+		"-")
+	cmd.Stdin = strings.NewReader(TODOPrompt + transcript)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("codex falló: %v: %s", err, lastLines(stderr.String(), 10))
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		return "", fmt.Errorf("codex no devolvió respuesta: %w", err)
+	}
+	return clean(string(data)), nil
+}
+
+// clean quita espacios y un posible bloque ```markdown envolvente.
+func clean(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "```") && strings.HasSuffix(s, "```") {
+		if i := strings.Index(s, "\n"); i >= 0 {
+			s = strings.TrimSpace(strings.TrimSuffix(s[i+1:], "```"))
+		}
+	}
+	return s + "\n"
+}
+
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
+}
