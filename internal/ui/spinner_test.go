@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/stopwatch"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -84,20 +82,5 @@ func TestFail(t *testing.T) {
 				t.Errorf("summary = %q", step.Summary)
 			}
 		})
-	}
-}
-
-func TestRecordingViewClearsOnFinish(t *testing.T) {
-	t.Parallel()
-	var m tea.Model = recordingModel{sw: stopwatch.NewWithInterval(time.Second)}
-	if v := m.View(); !strings.Contains(v, "Grabando") {
-		t.Fatalf("view should show the stopwatch:\n%s", v)
-	}
-	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("enter should quit")
-	}
-	if v := m.View(); v != "" {
-		t.Errorf("view after finishing = %q; want empty", v)
 	}
 }

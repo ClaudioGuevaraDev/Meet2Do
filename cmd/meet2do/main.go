@@ -22,7 +22,7 @@ import (
 )
 
 // version es la versión de la app (A.B.C); ver la regla de versionado en CLAUDE.md.
-const version = "0.5.0"
+const version = "0.6.0"
 
 func main() {
 	model := flag.String("model", transcriber.DefaultModel, "modelo de whisper.cpp (tiny, base, small, medium, large-v3, ...)")
@@ -210,7 +210,7 @@ func (s *session) record() error {
 		return ui.Fail("No se pudo iniciar la grabación.", err)
 	}
 	s.recorded = time.Now()
-	elapsed, uiErr := ui.RecordingScreen()
+	elapsed, uiErr := ui.RecordingScreen(rec)
 	// Detener siempre la grabación, aunque la pantalla haya fallado.
 	if err := rec.Stop(); err != nil {
 		return ui.Fail("No se pudo guardar la grabación.", err)

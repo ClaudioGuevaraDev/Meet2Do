@@ -260,3 +260,79 @@ func samples(b []byte) []int16 {
 	}
 	return out
 }
+
+func TestRecorderPauseResume(t *testing.T) {
+	t.Parallel()
+	mic, monitor := &fakeSource{}, &fakeSource{}
+	out := filepath.Join(t.TempDir(), "out.wav")
+	r := recorder.NewWithSources(out, mic, monitor)
+	if err := r.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	mic.emit(1)
+	monitor.emit(1, 2) // lo pendiente del monitor se escribe al pausar, sin esperar a Stop
+	if err := r.Pause(); err != nil {
+		t.Fatalf("pause: %v", err)
+	}
+	if err := r.Pause(); err != nil { // pausar dos veces no hace nada
+		t.Fatalf("second pause: %v", err)
+	}
+	mic.emit(500, 500) // durante la pausa: se descarta
+	monitor.emit(500)
+	if err := r.Resume(); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	mic.emit(10)
+	monitor.emit(20)
+	if err := r.Stop(); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+
+	got, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if want := []int16{2, 2, 30}; !slices.Equal(samples(got[44:]), want) {
+		t.Errorf("samples = %v; want %v", samples(got[44:]), want)
+	}
+}
+
+func TestRecorderStopWhilePaused(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		before  []int16
+		wantErr error
+	}{
+		{name: "keeps audio before the pause", before: []int16{5, 6}},
+		{name: "paused before any audio is empty", wantErr: recorder.ErrEmptyRecording},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mic, monitor := &fakeSource{}, &fakeSource{}
+			r := recorder.NewWithSources(filepath.Join(t.TempDir(), "out.wav"), mic, monitor)
+			if err := r.Start(); err != nil {
+				t.Fatalf("start: %v", err)
+			}
+			mic.emit(tt.before...)
+			if err := r.Pause(); err != nil {
+				t.Fatalf("pause: %v", err)
+			}
+			mic.emit(9, 9, 9)
+			if err := r.Stop(); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("stop = %v; want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestPauseResumeWithoutStart(t *testing.T) {
+	t.Parallel()
+	r := recorder.NewWithSources(filepath.Join(t.TempDir(), "out.wav"), &fakeSource{}, &fakeSource{})
+	for name, f := range map[string]func() error{"pause": r.Pause, "resume": r.Resume} {
+		if err := f(); !errors.Is(err, recorder.ErrNotStarted) {
+			t.Errorf("%s = %v; want ErrNotStarted", name, err)
+		}
+	}
+}

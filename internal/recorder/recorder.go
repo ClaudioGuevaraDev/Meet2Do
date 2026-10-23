@@ -21,7 +21,7 @@ const (
 )
 
 var (
-	// ErrNotStarted se devuelve al llamar Stop sin un Start exitoso.
+	// ErrNotStarted se devuelve al llamar Stop, Pause o Resume sin un Start exitoso.
 	ErrNotStarted = errors.New("la grabación no fue iniciada")
 	// ErrEmptyRecording se devuelve cuando la grabación no contiene audio.
 	ErrEmptyRecording = errors.New("la grabación quedó vacía")
@@ -41,8 +41,10 @@ type Recorder struct {
 
 	open func() (mic, monitor Source, release func(), err error)
 
-	mu      sync.Mutex
+	mu      sync.Mutex // protege bufs y paused
 	bufs    [2][]int16
+	paused  bool
+	flushMu sync.Mutex // serializa flush: lo llaman mixLoop y Pause
 	sources [2]Source
 	release func()
 	wav     *wavWriter
@@ -74,7 +76,7 @@ func (r *Recorder) Start() error {
 		return err
 	}
 
-	r.bufs = [2][]int16{}
+	r.bufs, r.paused = [2][]int16{}, false
 	r.sources = [2]Source{mic, monitor}
 	r.release, r.wav = release, wav
 	for i, src := range r.sources {
@@ -116,10 +118,43 @@ func (r *Recorder) Stop() error {
 	return nil
 }
 
+// Pause deja de grabar sin cerrar las fuentes: lo que llegue hasta Resume se descarta.
+// Antes escribe lo que quedaba en los buffers, para no perder el final previo a la pausa.
+func (r *Recorder) Pause() error {
+	if r.wav == nil {
+		return ErrNotStarted
+	}
+	r.mu.Lock()
+	wasPaused := r.paused
+	r.paused = true
+	r.mu.Unlock()
+	if wasPaused {
+		return nil
+	}
+	if err := r.flush(true); err != nil {
+		return fmt.Errorf("escribir %s: %w", r.Output, err)
+	}
+	return nil
+}
+
+// Resume vuelve a grabar. Ambas fuentes retoman con los buffers vacíos, así que siguen
+// alineadas.
+func (r *Recorder) Resume() error {
+	if r.wav == nil {
+		return ErrNotStarted
+	}
+	r.mu.Lock()
+	r.bufs, r.paused = [2][]int16{}, false
+	r.mu.Unlock()
+	return nil
+}
+
 func (r *Recorder) appender(i int) func([]int16) {
 	return func(s []int16) {
 		r.mu.Lock()
-		r.bufs[i] = append(r.bufs[i], s...)
+		if !r.paused {
+			r.bufs[i] = append(r.bufs[i], s...)
+		}
 		r.mu.Unlock()
 	}
 }
@@ -144,6 +179,8 @@ func (r *Recorder) mixLoop() {
 // flush mezcla lo que ambas fuentes tienen en común y lo escribe. Con final=true escribe todo,
 // rellenando con silencio la fuente más corta.
 func (r *Recorder) flush(final bool) error {
+	r.flushMu.Lock()
+	defer r.flushMu.Unlock()
 	r.mu.Lock()
 	a, b := r.bufs[0], r.bufs[1]
 	n := min(len(a), len(b))
